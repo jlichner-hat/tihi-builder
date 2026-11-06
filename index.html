@@ -178,8 +178,17 @@ html,body{margin:0}
 
 <div class="wrap" id="appView" hidden>
 <div class="logo-bar"><img src="assets/hat-logo.png" alt="HAT Human Active Technology" class="logo" width="640" height="313"></div>
-<div class="acct"><span>Signed in as <b id="acctUser"></b> · <b id="acctCompany"></b></span><button type="button" id="adminBtn" hidden>Approve companies</button><button type="button" id="signOutBtn">Sign out</button></div>
-<section id="adminPanel" class="panel" hidden><div class="panel-head"><h2>Company approvals</h2><button type="button" id="adminClose">Close</button></div><div id="companyList"></div></section>
+<div class="acct"><span>Signed in as <b id="acctUser"></b> · <b id="acctCompany"></b></span><button type="button" id="adminBtn" hidden>Admin</button><button type="button" id="signOutBtn">Sign out</button></div>
+<section id="adminPanel" class="panel" hidden>
+  <div class="panel-head"><h2>Admin</h2><div class="tabs"><button type="button" id="admTabCo" aria-pressed="true">Companies</button><button type="button" id="admTabUsers" aria-pressed="false">Users</button><button type="button" id="adminClose">Close</button></div></div>
+  <div id="companyList"></div>
+  <div id="userPane" hidden>
+    <div class="row r2"><label for="userSearch">Search users<input id="userSearch" type="search" placeholder="Name, email or company"></label>
+      <label for="userCompany">Company<select id="userCompany"><option value="">All companies</option></select></label></div>
+    <p id="userCount" class="hint"></p>
+    <div class="tablewrap"><table><thead><tr><th>Username</th><th>Email</th><th>Company</th><th>Role</th><th>Joined</th></tr></thead><tbody id="userRows"></tbody></table></div>
+  </div>
+</section>
 <header>
   <div>
     <h1>Ti:Hi Shipment Builder</h1>
@@ -916,6 +925,28 @@ async function route(){
   })();
   try{await routing}finally{routing=null}
 }
+let USERS=[];
+async function loadUsers(){
+  const {data,error}=await sb.from("profiles").select("id,username,email,role,created_at,company_id,companies(name,email_domain,status)").order("created_at",{ascending:false});
+  if(error){$("userRows").innerHTML=`<tr><td colspan="5">Couldn't load users.</td></tr>`;return}
+  USERS=data;
+  const cos=[...new Map(data.map(u=>[u.company_id,u.companies?u.companies.name:"?"])).entries()].sort((a,b)=>a[1].localeCompare(b[1]));
+  const sel=$("userCompany"),keep=sel.value;
+  sel.innerHTML=`<option value="">All companies</option>`+cos.map(([id,n])=>`<option value="${id}">${esc(n)}</option>`).join("");
+  sel.value=cos.some(c=>c[0]===keep)?keep:"";
+  renderUsers();
+}
+function renderUsers(){
+  const q=$("userSearch").value.trim().toLowerCase(),co=$("userCompany").value;
+  const list=USERS.filter(u=>(!co||u.company_id===co)&&(!q||[u.username,u.email,u.companies&&u.companies.name].join(" ").toLowerCase().includes(q)));
+  $("userCount").textContent=`${list.length} of ${USERS.length} user${USERS.length===1?"":"s"}`;
+  $("userRows").innerHTML=list.length?list.map(u=>`<tr><td>${esc(u.username)}</td><td class="mono">${esc(u.email)}</td>
+    <td>${esc(u.companies?u.companies.name:"")} ${u.companies&&u.companies.status!=="approved"?`<span class="pill${u.companies.status==="rejected"?" warn":" mix"}">${u.companies.status}</span>`:""}</td>
+    <td>${u.role==="company_admin"?"Company admin":"Member"}</td><td class="mono">${new Date(u.created_at).toLocaleDateString()}</td></tr>`).join("")
+    :`<tr><td colspan="5" class="hint">No users match.</td></tr>`;
+}
+function adminTab(t){$("admTabCo").setAttribute("aria-pressed",t==="co");$("admTabUsers").setAttribute("aria-pressed",t==="users");
+  $("companyList").hidden=t!=="co";$("userPane").hidden=t!=="users";if(t==="users")loadUsers();else loadCompanies()}
 async function loadCompanies(){
   const {data,error}=await sb.from("companies").select("id,name,email_domain,status,created_at").order("created_at",{ascending:false});
   const box=$("companyList");
@@ -972,7 +1003,11 @@ if(!sb){
   $("signOutBtn").addEventListener("click",async()=>{await sb.auth.signOut();PROFILE=null;LIB=[];renderLib();show("auth");authTab("in")});
   $("pendingOut").addEventListener("click",async()=>{await sb.auth.signOut();show("auth");authTab("in")});
   $("pendingCheck").addEventListener("click",()=>route());
-  $("adminBtn").addEventListener("click",()=>{$("adminPanel").hidden=false;loadCompanies()});
+  $("adminBtn").addEventListener("click",()=>{$("adminPanel").hidden=false;adminTab("co")});
+  $("admTabCo").addEventListener("click",()=>adminTab("co"));
+  $("admTabUsers").addEventListener("click",()=>adminTab("users"));
+  $("userSearch").addEventListener("input",renderUsers);
+  $("userCompany").addEventListener("change",renderUsers);
   $("adminClose").addEventListener("click",()=>{$("adminPanel").hidden=true});
   $("companyList").addEventListener("click",async e=>{const id=e.target.dataset.cid;if(!id)return;
     e.target.disabled=true;const {error}=await sb.rpc("set_company_status",{cid:id,new_status:e.target.dataset.st});
