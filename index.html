@@ -1,0 +1,1024 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ti:Hi Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: warehouse work order. Inputs in a left rail, results flow right; stacks to one column on phones. */
+:root{
+  --bg:#eef0f2; --panel:#ffffff; --ink:#1d232b; --muted:#5b6672; --line:#d3d8de; --soft:#e4e8ec;
+  --accent:#f2b705; --accent-ink:#1d232b; --warn:#b4401f; --ok:#2f7d4f;
+  --pallet:#9a7b52; --truck:#c9cfd6; --truck-floor:#f7f8f9;
+  --c1:#c98a4b; --c2:#4f7fb0; --c3:#6f9a54; --c4:#a35d8f; --c5:#c4a23a; --c6:#4b9a99; --c7:#b4573d; --c8:#7a6fb0;
+  --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#14181d; --panel:#1c2229; --ink:#e6eaee; --muted:#9aa5b1; --line:#323b45; --soft:#252d36;
+  --accent:#f2b705; --accent-ink:#14181d; --warn:#e2774f; --ok:#5cbf83;
+  --pallet:#8a6c45; --truck:#4a5562; --truck-floor:#20272f; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#14181d; --panel:#1c2229; --ink:#e6eaee; --muted:#9aa5b1; --line:#323b45; --soft:#252d36;
+  --accent:#f2b705; --accent-ink:#14181d; --warn:#e2774f; --ok:#5cbf83;
+  --pallet:#8a6c45; --truck:#4a5562; --truck-floor:#20272f; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:1320px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;border-bottom:3px solid var(--ink);padding-bottom:10px;position:relative}
+header::after{content:"";position:absolute;left:0;right:0;bottom:-9px;height:6px;background:repeating-linear-gradient(-45deg,var(--accent) 0 10px,transparent 10px 20px)}
+h1{font-family:var(--f-display);font-weight:700;font-size:2.4rem;letter-spacing:.02em;margin:0;line-height:1;text-transform:uppercase}
+.sub{color:var(--muted);margin:0;max-width:60ch}
+h2{font-family:var(--f-display);font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:1.25rem;margin:0}
+h3{font-family:var(--f-display);font-weight:600;font-size:1.1rem;letter-spacing:.03em;margin:0}
+.grid{display:grid;grid-template-columns:minmax(0,430px) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:960px){.grid{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:16px;min-width:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.panel-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.step{font-family:var(--f-mono);font-size:.75rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+label{font-size:.75rem;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;display:flex;flex-direction:column;gap:3px}
+input,select{font:inherit;font-family:var(--f-mono);font-size:.9rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:6px 7px;width:100%;min-width:0}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input[type=checkbox]{width:auto}
+.check{flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:.85rem;color:var(--ink)}
+button{font:inherit;font-weight:600;font-size:.85rem;border-radius:4px;border:1px solid var(--line);background:var(--soft);color:var(--ink);padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--muted)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.x{padding:2px 8px;font-size:.8rem;color:var(--warn);background:transparent}
+.row{display:grid;gap:8px}
+.r2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.r3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.r4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.item{border:1px solid var(--line);border-radius:5px;padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--panel)}
+.item-head{display:flex;align-items:center;gap:8px}
+.swatch{width:14px;height:14px;border-radius:2px;flex:none;border:1px solid rgba(0,0,0,.25)}
+.item-head input{font-family:var(--f-body);font-weight:600}
+.hint{font-size:.8rem;color:var(--muted);margin:0}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.tile .k{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.tile .v{font-family:var(--f-display);font-weight:700;font-size:1.9rem;line-height:1.05;font-variant-numeric:tabular-nums}
+.tile .s{font-size:.78rem;color:var(--muted);font-family:var(--f-mono)}
+.tile.hl{border-color:var(--accent);box-shadow:inset 0 -4px 0 var(--accent)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+.card{border:1px solid var(--line);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--panel);min-width:0}
+.tihi{font-family:var(--f-display);font-weight:700;font-size:2rem;line-height:1}
+.tihi small{font-size:.9rem;color:var(--muted);font-weight:600;letter-spacing:.05em;margin-left:6px}
+.figs{display:grid;grid-template-columns:1.25fr 1fr;gap:8px;align-items:end}
+.figs figure{margin:0;display:flex;flex-direction:column;gap:3px;min-width:0}
+figcaption{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+svg{display:block;max-width:100%;height:auto}
+dl.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0;font-size:.82rem}
+dl.kv dt{color:var(--muted)} dl.kv dd{margin:0;font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.82rem}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+td.n{font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.pill{display:inline-block;font-size:.7rem;font-weight:600;padding:1px 7px;border-radius:999px;background:var(--soft);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.pill.mix{background:var(--accent);color:var(--accent-ink)}
+.pill.warn{background:var(--warn);color:#fff}
+.alert{border-left:4px solid var(--warn);background:var(--soft);padding:8px 12px;border-radius:0 4px 4px 0;font-size:.85rem}
+.truckwrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--truck-floor);padding:10px}
+.truckwrap svg{min-width:640px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.8rem}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.balance{display:flex;flex-direction:column;gap:4px}
+.bar{height:10px;border-radius:5px;background:var(--soft);overflow:hidden;display:flex}
+.bar i{display:block;height:100%}
+.mono{font-family:var(--f-mono)}
+.lib{border:1px dashed var(--muted);border-radius:5px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.lib-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}
+.lib summary{cursor:pointer;font-size:.8rem;color:var(--muted)}
+.lib-item{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:.82rem;padding:4px 0;border-bottom:1px solid var(--line)}
+.lib-item .mono{color:var(--muted);font-size:.75rem}
+button.save{padding:3px 10px;font-size:.78rem;margin-left:auto;flex:none}
+button:disabled{opacity:.5;cursor:default}
+.hdr-actions{display:flex;gap:8px;flex-wrap:wrap}
+#pdfMsg{width:100%;text-align:right}
+.iso{margin:0;padding:8px;background:var(--bg);border-radius:4px;display:flex;justify-content:center}
+.iso svg{max-height:240px;width:100%}
+.dims{font-size:1rem;font-weight:500;text-align:center}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tabs button[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+@media (max-width:520px){.r4{grid-template-columns:repeat(2,minmax(0,1fr))}.r3{grid-template-columns:repeat(2,minmax(0,1fr))}h1{font-size:1.9rem}.figs{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+[hidden]{display:none!important}
+html,body{margin:0}
+.auth{max-width:440px;margin:6vh auto 0;display:flex;flex-direction:column;gap:16px}
+.auth .brand{border-bottom:3px solid var(--ink);padding-bottom:8px;position:relative}
+.auth .brand::after{content:"";position:absolute;left:0;right:0;bottom:-9px;height:6px;background:repeating-linear-gradient(-45deg,var(--accent) 0 10px,transparent 10px 20px)}
+.auth form{display:flex;flex-direction:column;gap:10px}
+.auth .tabs button{flex:1}
+.msg{font-size:.85rem;padding:8px 10px;border-radius:4px;background:var(--soft)}
+.msg.err{border-left:4px solid var(--warn)} .msg.ok{border-left:4px solid var(--ok)}
+.acct{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.85rem}
+.acct b{font-weight:600}
+.linkbtn{background:none;border:none;color:var(--muted);text-decoration:underline;padding:0;font-weight:400;cursor:pointer}
+.company-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.company-row .acts{display:flex;gap:6px}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+</head>
+<body>
+<!-- SIGN IN / SIGN UP -->
+<div id="authView" class="auth" hidden>
+  <div class="brand"><h1>Ti:Hi Builder</h1><p class="sub">Pallet and truck load planning</p></div>
+  <section class="panel">
+    <div class="tabs" role="tablist">
+      <button type="button" id="tabIn" aria-pressed="true">Sign in</button>
+      <button type="button" id="tabUp" aria-pressed="false">Create account</button>
+    </div>
+    <form id="signInForm" novalidate>
+      <label for="inEmail">Email<input id="inEmail" type="email" autocomplete="email" required></label>
+      <label for="inPass">Password<input id="inPass" type="password" autocomplete="current-password" required></label>
+      <button class="primary" type="submit">Sign in</button>
+      <button class="linkbtn" type="button" id="forgotBtn">Forgot password?</button>
+    </form>
+    <form id="signUpForm" novalidate hidden>
+      <label for="upUser">Username<input id="upUser" autocomplete="username" minlength="3" maxlength="40" required></label>
+      <label for="upCompany">Company<input id="upCompany" autocomplete="organization" required></label>
+      <label for="upEmail">Company email<input id="upEmail" type="email" autocomplete="email" required></label>
+      <label for="upPass">Password (8+ characters)<input id="upPass" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label for="upPass2">Confirm password<input id="upPass2" type="password" autocomplete="new-password" required></label>
+      <p class="hint">Use your work email. We'll send a link to verify it, and your company is matched by its email domain. New companies are approved before they can use the app.</p>
+      <button class="primary" type="submit">Create account</button>
+    </form>
+    <form id="resetForm" novalidate hidden>
+      <h3>Set a new password</h3>
+      <label for="newPass">New password (8+ characters)<input id="newPass" type="password" autocomplete="new-password" minlength="8" required></label>
+      <button class="primary" type="submit">Save password</button>
+    </form>
+    <div id="authMsg" class="msg" role="status" hidden></div>
+  </section>
+</div>
+
+<!-- WAITING FOR COMPANY APPROVAL -->
+<div id="pendingView" class="auth" hidden>
+  <div class="brand"><h1>Ti:Hi Builder</h1></div>
+  <section class="panel">
+    <h2>Almost there</h2>
+    <p id="pendingText"></p>
+    <div class="hdr-actions"><button type="button" id="pendingCheck" class="primary">Check again</button><button type="button" id="pendingOut">Sign out</button></div>
+  </section>
+</div>
+
+
+<div class="wrap" id="appView" hidden>
+<div class="acct"><span>Signed in as <b id="acctUser"></b> · <b id="acctCompany"></b></span><button type="button" id="adminBtn" hidden>Approve companies</button><button type="button" id="signOutBtn">Sign out</button></div>
+<section id="adminPanel" class="panel" hidden><div class="panel-head"><h2>Company approvals</h2><button type="button" id="adminClose">Close</button></div><div id="companyList"></div></section>
+<header>
+  <div>
+    <h1>Ti:Hi Builder</h1>
+    <p class="sub">Enter your package sizes, pick pallets and a stack height, and get cases per layer (Ti), layers per pallet (Hi), a picture and spec sheet for every finished pallet, and a trailer floor plan.</p>
+  </div>
+  <div class="hdr-actions"><button id="resetBtn" type="button">Load example data</button>
+    <button id="pdfBtn" class="primary" type="button">Download PDF report</button></div>
+  <p id="pdfMsg" class="hint" role="status" hidden></p>
+</header>
+
+<div class="grid">
+  <!-- INPUTS -->
+  <div class="col">
+    <section class="panel" aria-labelledby="pkgH">
+      <div class="panel-head"><div><div class="step">Step 1</div><h2 id="pkgH">Packages</h2></div></div>
+      <label for="pkgCount">Number of different package sizes
+        <input id="pkgCount" type="number" min="1" max="20" step="1" value="3">
+      </label>
+      <p class="hint">Dimensions in inches, weight in pounds per package. L × W is the footprint; H is the side that stays up.</p>
+      <datalist id="libNames"></datalist>
+      <div id="libBox" class="lib">
+        <div class="lib-row">
+          <label for="libSel">Saved items<select id="libSel" disabled><option>Loading saved items...</option></select></label>
+          <button id="libAdd" type="button" disabled>Add to list</button>
+        </div>
+        <details id="libManage"><summary>Manage saved items</summary><div id="libList" class="col"></div></details>
+        <p id="libMsg" class="hint" role="status">Click Save on any package to keep its size and weight for your company. Typing a saved name fills in the rest.</p>
+      </div>
+      <div id="pkgList" class="col"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="palH">
+      <div class="panel-head"><div><div class="step">Step 2</div><h2 id="palH">Pallets</h2></div>
+        <button id="addPallet" type="button">+ Custom pallet</button></div>
+      <div id="palList" class="col"></div>
+      <div class="row r2">
+        <label for="stackH">Max stack height (in)
+          <input id="stackH" type="number" min="1" step="0.5" value="52"></label>
+        <label for="overhang">Allowed overhang per side (in)
+          <input id="overhang" type="number" min="0" step="0.25" value="0"></label>
+      </div>
+      <label class="check" for="stackInclPallet"><input id="stackInclPallet" type="checkbox"> Stack height includes the pallet itself</label>
+      <label class="check" for="allowTip"><input id="allowTip" type="checkbox"> Packages may be placed on their side</label>
+      <label for="mixPallet">Pallet for mixed (leftover) loads
+        <select id="mixPallet"></select></label>
+    </section>
+
+    <section class="panel" aria-labelledby="trkH">
+      <div class="panel-head"><div><div class="step">Step 3</div><h2 id="trkH">Truck</h2></div></div>
+      <label for="truckPreset">Trailer type
+        <select id="truckPreset">
+          <option value="53">53 ft dry van</option>
+          <option value="48">48 ft dry van</option>
+          <option value="28">28 ft pup trailer</option>
+          <option value="26">26 ft box truck</option>
+          <option value="custom">Custom</option>
+        </select></label>
+      <div class="row r4">
+        <label for="tL">Length (in)<input id="tL" type="number" step="0.5"></label>
+        <label for="tW">Width (in)<input id="tW" type="number" step="0.5"></label>
+        <label for="tH">Height (in)<input id="tH" type="number" step="0.5"></label>
+        <label for="tMax">Max lb<input id="tMax" type="number" step="100"></label>
+      </div>
+      <label class="check" for="dbl"><input id="dbl" type="checkbox"> Allow double-stacking pallets</label>
+      <p class="hint">Interior dimensions. A 53 ft van is about 630 × 98.5 × 108 in with a 45,000 lb payload; check your carrier's numbers.</p>
+    </section>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="col" id="results" aria-live="polite"></div>
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script>
+(function(){
+"use strict";
+const COLORS=["--c1","--c2","--c3","--c4","--c5","--c6","--c7","--c8"];
+const color=i=>`var(${COLORS[i%COLORS.length]})`;
+const TRUCKS={"53":{L:630,W:98.5,H:108,max:45000},"48":{L:570,W:98.5,H:108,max:45000},"28":{L:330,W:98,H:106,max:22500},"26":{L:312,W:96,H:96,max:10000}};
+const LETTERS="ABCDEFGHIJKLMNOPQRST";
+
+const EXAMPLE={
+  packages:[
+    {name:"Case A",L:16,W:12,H:10,wt:25,qty:900,pallet:"auto"},
+    {name:"Case B",L:24,W:16,H:12,wt:40,qty:300,pallet:"auto"},
+    {name:"Case C",L:12,W:10,H:8,wt:12,qty:500,pallet:"auto"}],
+  pallets:[{id:"p0",name:"GMA 48 × 40",L:48,W:40,H:5.5,tare:45,max:2500,fixed:true}],
+  stackH:52,overhang:0,stackInclPallet:false,allowTip:false,mixPallet:"p0",
+  truck:"53",tL:630,tW:98.5,tH:108,tMax:45000,dbl:false
+};
+let state=JSON.parse(JSON.stringify(EXAMPLE));
+let palSeq=1;
+const $=id=>document.getElementById(id);
+const num=(v,d=0)=>{const n=parseFloat(v);return isFinite(n)?n:d};
+const fmt=(n,d=0)=>Number(n).toLocaleString(undefined,{maximumFractionDigits:d,minimumFractionDigits:d});
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------- LAYER PATTERN (Ti) ----------
+   Recursive guillotine block search: fill a rectangle with blocks of the box in either
+   orientation, split at every multiple of the box size, keep the best count. */
+function layerPattern(PL,PW,l,w){
+  const memo=new Map();
+  function f(L,W){
+    if(L<Math.min(l,w)-1e-9||W<Math.min(l,w)-1e-9) return {n:0,r:[]};
+    const key=L.toFixed(3)+"|"+W.toFixed(3);
+    if(memo.has(key)) return memo.get(key);
+    let best={n:0,r:[]};
+    const grid=(a,b)=>{const nx=Math.floor(L/a+1e-9),ny=Math.floor(W/b+1e-9);const r=[];
+      for(let i=0;i<nx;i++)for(let j=0;j<ny;j++)r.push({x:i*a,y:j*b,w:a,h:b});return {n:nx*ny,r}};
+    for(const g of [grid(l,w),grid(w,l)]) if(g.n>best.n) best=g;
+    for(const [a,b] of [[l,w],[w,l]]){
+      // vertical strip of columns along L
+      const ny=Math.floor(W/b+1e-9);
+      if(ny>0) for(let i=1;i*a<=L+1e-9;i++){
+        const rest=f(L-i*a,W); const n=i*ny+rest.n;
+        if(n>best.n){const r=[];for(let x=0;x<i;x++)for(let y=0;y<ny;y++)r.push({x:x*a,y:y*b,w:a,h:b});
+          rest.r.forEach(q=>r.push({x:q.x+i*a,y:q.y,w:q.w,h:q.h}));best={n,r};}
+      }
+      // horizontal strip of rows along W
+      const nx=Math.floor(L/a+1e-9);
+      if(nx>0) for(let j=1;j*b<=W+1e-9;j++){
+        const rest=f(L,W-j*b); const n=j*nx+rest.n;
+        if(n>best.n){const r=[];for(let y=0;y<j;y++)for(let x=0;x<nx;x++)r.push({x:x*a,y:y*b,w:a,h:b});
+          rest.r.forEach(q=>r.push({x:q.x,y:q.y+j*b,w:q.w,h:q.h}));best={n,r};}
+      }
+    }
+    memo.set(key,best);return best;
+  }
+  return f(PL,PW);
+}
+
+function usableHeight(p){return state.stackInclPallet?Math.max(0,state.stackH-p.H):state.stackH}
+
+/* Best Ti x Hi for one package on one pallet, respecting weight limit */
+function tiHi(pkg,p){
+  const oh=state.overhang*2, L=p.L+oh, W=p.W+oh, avail=usableHeight(p);
+  const dims=[pkg.L,pkg.W,pkg.H];
+  const orients=state.allowTip?[[0,1,2],[0,2,1],[1,2,0]]:[[0,1,2]];
+  let best=null;
+  for(const o of orients){
+    const l=dims[o[0]],w=dims[o[1]],h=dims[o[2]];
+    if(!(l>0&&w>0&&h>0)) continue;
+    const pat=layerPattern(L,W,l,w); if(!pat.n) continue;
+    let hi=Math.floor(avail/h+1e-9), ti=pat.n;
+    let cases=ti*hi, limitedBy="height";
+    if(pkg.wt>0 && p.max>0 && cases*pkg.wt>p.max){
+      cases=Math.floor(p.max/pkg.wt); hi=Math.floor(cases/ti); limitedBy="weight";
+    }
+    const cand={ti,hi,cases,h,l,w,pat,limitedBy,pallet:p,offset:state.overhang};
+    if(!best||cand.cases>best.cases||(cand.cases===best.cases&&cand.ti*cand.l*cand.w>best.ti*best.l*best.w)) best=cand;
+  }
+  return best;
+}
+
+/* ---------- BUILD PALLETS ---------- */
+function plan(){
+  const pallets=state.pallets.filter(p=>p.L>0&&p.W>0);
+  const mixP=pallets.find(p=>p.id===state.mixPallet)||pallets[0];
+  const skus=state.packages.map((pkg,i)=>({...pkg,idx:i,letter:LETTERS[i]}));
+  const out={skus:[],built:[],warnings:[]};
+  if(!pallets.length){out.warnings.push("Add at least one pallet with a length and width.");return out}
+  const remLayers=[];
+  for(const s of skus){
+    let choices=s.pallet==="auto"?pallets:pallets.filter(p=>p.id===s.pallet);
+    if(!choices.length) choices=pallets;
+    let best=null;
+    for(const p of choices){const r=tiHi(s,p); if(!r) continue;
+      const util=(r.cases*s.L*s.W*s.H)/(p.L*p.W*usableHeight(p));
+      if(!best||util>best.util+1e-9) best={...r,util};}
+    const rec={sku:s,res:best,full:0,rem:0};
+    out.skus.push(rec);
+    if(!best||best.cases<1){out.warnings.push(`${esc(s.name)} doesn't fit on any pallet with the current stack height or weight limit.`);continue}
+    if(best.hi<1) out.warnings.push(`${esc(s.name)}: a full layer would exceed the pallet's weight limit, so pallets get a partial layer.`);
+    const qty=Math.max(0,Math.floor(s.qty));
+    rec.full=Math.floor(qty/best.cases); rec.rem=qty-rec.full*best.cases;
+    for(let k=0;k<rec.full;k++) out.built.push({type:"full",pallet:best.pallet,layers:Array.from({length:best.hi},()=>({sku:s,cases:best.ti,h:best.h,res:best})).concat(best.cases>best.ti*best.hi?[{sku:s,cases:best.cases-best.ti*best.hi,h:best.h,res:best}]:[])});
+    if(rec.rem>0){
+      const mr=(best.pallet===mixP)?best:tiHi(s,mixP);
+      if(!mr||mr.ti<1){out.warnings.push(`${esc(s.name)} leftovers don't fit the mixed-load pallet; they were put on their own pallet.`);
+        out.built.push({type:"partial",pallet:best.pallet,layers:splitLayers(s,rec.rem,best)});continue}
+      remLayers.push(...splitLayers(s,rec.rem,mr));
+    }
+  }
+  // Mixed pallets: heaviest full layers at the bottom, partial layers on top, first-fit by height and weight
+  const availMix=usableHeight(mixP);
+  remLayers.sort((a,b)=>(b.full-a.full)||(b.cases*b.sku.wt-a.cases*a.sku.wt));
+  const mixed=[];
+  for(const ly of remLayers){
+    const lw=ly.cases*ly.sku.wt;
+    let tgt=mixed.find(m=>m.h+ly.h<=availMix+1e-9&&(!mixP.max||m.wt+lw<=mixP.max));
+    if(!tgt){tgt={type:"mixed",pallet:mixP,layers:[],h:0,wt:0};mixed.push(tgt)}
+    tgt.layers.push(ly);tgt.h+=ly.h;tgt.wt+=lw;
+  }
+  mixed.forEach(m=>{const kinds=new Set(m.layers.map(l=>l.sku.idx));if(kinds.size===1)m.type="partial";out.built.push(m)});
+  out.built.forEach((b,i)=>{b.id=i+1;b.loadH=b.layers.reduce((a,l)=>a+l.h,0);b.height=b.loadH+b.pallet.H;
+    b.weight=b.pallet.tare+b.layers.reduce((a,l)=>a+l.cases*l.sku.wt,0);b.cases=b.layers.reduce((a,l)=>a+l.cases,0);
+    b.footL=b.pallet.L+2*state.overhang;b.footW=b.pallet.W+2*state.overhang;});
+  return out;
+}
+function splitLayers(s,n,r){const a=[];let left=n;
+  while(left>0){const c=Math.min(r.ti,left);a.push({sku:s,cases:c,h:r.h,res:r,full:c===r.ti?1:0});left-=c}return a}
+
+/* ---------- LOAD TRUCK ---------- */
+function loadTruck(built){
+  const T={L:state.tL,W:state.tW,H:state.tH,max:state.tMax};
+  const warnings=[];
+  // 1. form units (single pallets or double stacks)
+  let units=built.map(b=>({items:[b],L:b.footL,W:b.footW,h:b.height,wt:b.weight}));
+  units.forEach(u=>{if(u.h>T.H)warnings.push(`Pallet ${u.items[0].id} is ${fmt(u.h,1)} in tall, taller than the trailer.`)});
+  if(state.dbl){
+    const sorted=[...units].sort((a,b)=>b.wt-a.wt); const used=new Set(); const out=[];
+    for(let i=0;i<sorted.length;i++){
+      const bot=sorted[i]; if(used.has(bot)) continue; used.add(bot);
+      let pick=null;
+      for(let j=sorted.length-1;j>i;j--){const t=sorted[j]; if(used.has(t)) continue;
+        if(t.L===bot.L&&t.W===bot.W&&t.wt<=bot.wt&&t.h+bot.h<=T.H){pick=t;break}}
+      if(pick){used.add(pick);out.push({items:[bot.items[0],pick.items[0]],L:bot.L,W:bot.W,h:bot.h+pick.h,wt:bot.wt+pick.wt})}
+      else out.push(bot);
+    }
+    units=out;
+  }
+  // 2. choose the floor orientation per footprint that packs the most per inch of trailer length
+  const groups=new Map();
+  units.forEach(u=>{const k=u.L+"x"+u.W;if(!groups.has(k))groups.set(k,[]);groups.get(k).push(u)});
+  const ordered=[...groups.values()].sort((a,b)=>b.length-a.length);
+  const trucks=[]; let cur=null;
+  const newTruck=()=>{cur={rows:[],used:0,wt:0,units:[]};trucks.push(cur)};
+  newTruck();
+  for(const g of ordered){
+    const {L,W}=g[0];
+    const opts=[{depth:L,across:W},{depth:W,across:L}].map(o=>({...o,n:Math.floor(T.W/o.across+1e-9)})).filter(o=>o.n>0);
+    if(!opts.length){warnings.push(`${L} × ${W} in pallets are wider than the trailer.`);continue}
+    opts.sort((a,b)=>(b.n/b.depth)-(a.n/a.depth));
+    const o=opts[0];
+    // heavy units spread: alternate heaviest and lighter so rows balance
+    const list=[...g].sort((a,b)=>b.wt-a.wt);
+    let row=null;
+    for(const u of list){
+      if(cur.wt+u.wt>T.max&&cur.units.length){newTruck();row=null}
+      if(!row||row.items.length>=o.n){
+        if(cur.used+o.depth>T.L+1e-9){newTruck()}
+        row={x:cur.used,depth:o.depth,across:o.across,items:[]};cur.rows.push(row);cur.used+=o.depth;
+      }
+      const y=(T.W-o.n*o.across)/2+row.items.length*o.across;
+      const pl={u,x:row.x,y,dl:o.depth,dw:o.across};
+      row.items.push(pl);cur.units.push(pl);cur.wt+=u.wt;
+    }
+  }
+  if(!cur.units.length&&trucks.length>1) trucks.pop();
+  trucks.forEach(t=>{let front=0;t.units.forEach(p=>{const c=p.x+p.dl/2;if(c<T.L/2)front+=p.u.wt});t.front=front;t.rear=t.wt-front;
+    t.positions=t.units.length;t.pallets=t.units.reduce((a,p)=>a+p.u.items.length,0)});
+  return {T,trucks,warnings};
+}
+
+/* ---------- RENDER: inputs ---------- */
+function palletOptions(sel,withAuto){
+  return (withAuto?`<option value="auto"${sel==="auto"?" selected":""}>Auto (best fit)</option>`:"")+
+    state.pallets.map(p=>`<option value="${p.id}"${sel===p.id?" selected":""}>${esc(p.name)} (${p.L}×${p.W})</option>`).join("");
+}
+function renderPkgs(){
+  $("pkgList").innerHTML=state.packages.map((p,i)=>`
+   <div class="item" data-i="${i}">
+     <div class="item-head"><span class="swatch" style="background:${color(i)}"></span>
+       <input id="pk-name-${i}" data-f="name" list="libNames" autocomplete="off" value="${esc(p.name)}" aria-label="Package ${i+1} name">
+       <button type="button" class="save" data-save="${i}"${LIBDB&&LIBW?"":" disabled"} title="Save this package's size and weight">Save</button></div>
+     <div class="row r4">
+       <label for="pk-L-${i}">L in<input id="pk-L-${i}" data-f="L" type="number" min="0" step="0.25" value="${p.L}"></label>
+       <label for="pk-W-${i}">W in<input id="pk-W-${i}" data-f="W" type="number" min="0" step="0.25" value="${p.W}"></label>
+       <label for="pk-H-${i}">H in<input id="pk-H-${i}" data-f="H" type="number" min="0" step="0.25" value="${p.H}"></label>
+       <label for="pk-wt-${i}">Wt lb<input id="pk-wt-${i}" data-f="wt" type="number" min="0" step="0.1" value="${p.wt}"></label>
+     </div>
+     <div class="row r2">
+       <label for="pk-qty-${i}">Quantity to ship<input id="pk-qty-${i}" data-f="qty" type="number" min="0" step="1" value="${p.qty}"></label>
+       <label for="pk-pal-${i}">Pallet<select id="pk-pal-${i}" data-f="pallet">${palletOptions(p.pallet,true)}</select></label>
+     </div>
+   </div>`).join("");
+}
+function renderPallets(){
+  $("palList").innerHTML=state.pallets.map((p,i)=>`
+   <div class="item" data-p="${i}">
+     <div class="item-head"><span class="swatch" style="background:var(--pallet)"></span>
+       <input id="pl-name-${p.id}" data-f="name" value="${esc(p.name)}" aria-label="Pallet name">
+       ${p.fixed?'<span class="pill">Default</span>':`<button class="x" type="button" data-del="${i}" aria-label="Remove ${esc(p.name)}">Remove</button>`}</div>
+     <div class="row r3">
+       <label for="pl-L-${p.id}">Length in<input id="pl-L-${p.id}" data-f="L" type="number" min="0" step="0.5" value="${p.L}"></label>
+       <label for="pl-W-${p.id}">Width in<input id="pl-W-${p.id}" data-f="W" type="number" min="0" step="0.5" value="${p.W}"></label>
+       <label for="pl-H-${p.id}">Pallet ht in<input id="pl-H-${p.id}" data-f="H" type="number" min="0" step="0.25" value="${p.H}"></label>
+       <label for="pl-tare-${p.id}">Pallet lb<input id="pl-tare-${p.id}" data-f="tare" type="number" min="0" step="1" value="${p.tare}"></label>
+       <label for="pl-max-${p.id}">Max load lb<input id="pl-max-${p.id}" data-f="max" type="number" min="0" step="50" value="${p.max}"></label>
+     </div>
+   </div>`).join("");
+  $("mixPallet").innerHTML=palletOptions(state.mixPallet,false);
+}
+function syncGlobals(){
+  $("pkgCount").value=state.packages.length;$("stackH").value=state.stackH;$("overhang").value=state.overhang;
+  $("stackInclPallet").checked=state.stackInclPallet;$("allowTip").checked=state.allowTip;
+  $("truckPreset").value=state.truck;$("tL").value=state.tL;$("tW").value=state.tW;$("tH").value=state.tH;$("tMax").value=state.tMax;$("dbl").checked=state.dbl;
+}
+
+/* ---------- RENDER: drawings ---------- */
+function layerSVG(res,ci){
+  const p=res.pallet,oh=res.offset,L=p.L+2*oh,W=p.W+2*oh,pad=2;
+  const rects=res.pat.r.map(r=>`<rect x="${r.x+pad}" y="${r.y+pad}" width="${r.w}" height="${r.h}" fill="${color(ci)}" stroke="var(--panel)" stroke-width=".8"/>`).join("");
+  return `<svg viewBox="0 0 ${L+pad*2} ${W+pad*2}" role="img" aria-label="Layer pattern, ${res.ti} packages">
+   <rect x="${pad+oh}" y="${pad+oh}" width="${p.L}" height="${p.W}" fill="var(--pallet)" opacity=".35"/>
+   <rect x="${pad+oh}" y="${pad+oh}" width="${p.L}" height="${p.W}" fill="none" stroke="var(--pallet)" stroke-width="1"/>
+   ${rects}</svg>`;
+}
+function sideSVG(b,maxH){
+  const p=b.pallet,len=b.footL,pad=4,H=Math.max(maxH,b.height);
+  const vbH=H+pad*2+8;
+  let y=vbH-pad-p.H, s="";
+  s+=`<rect x="${pad+state.overhang}" y="${y}" width="${p.L}" height="${p.H}" fill="var(--pallet)"/>`;
+  for(const ly of b.layers){
+    const r=ly.res;const fr=ly.cases/r.ti; const w=len*Math.min(1,fr);
+    y-=ly.h; s+=`<rect x="${pad}" y="${y}" width="${w}" height="${ly.h}" fill="${color(ly.sku.idx)}" stroke="var(--panel)" stroke-width=".8"/>`;
+  }
+  const lim=state.stackInclPallet?state.stackH:state.stackH+p.H;
+  const ly=vbH-pad-lim;
+  s+=`<line x1="0" x2="${len+pad*2}" y1="${ly}" y2="${ly}" stroke="var(--warn)" stroke-dasharray="3 2" stroke-width=".8"/>`;
+  return `<svg viewBox="0 0 ${len+pad*2} ${vbH}" role="img" aria-label="Side view, ${fmt(b.height,1)} inches tall">${s}</svg>`;
+}
+function palletBoxes(b){
+  const pal=b.pallet,oh=state.overhang,Lx=pal.L+2*oh,boxes=[];let z=pal.H;
+  b.layers.forEach((ly,li)=>{const mir=li%2===1;
+    ly.res.pat.r.slice(0,ly.cases).forEach(q=>{const x=mir?Lx-q.x-q.w:q.x;
+      boxes.push({x:x-oh,y:q.y-oh,z,w:q.w,h:q.h,d:ly.h,sku:ly.sku.idx})});z+=ly.h});
+  return boxes;
+}
+function finishedDims(b){
+  const bx=palletBoxes(b);let x0=0,y0=0,x1=b.pallet.L,y1=b.pallet.W;
+  bx.forEach(q=>{x0=Math.min(x0,q.x);y0=Math.min(y0,q.y);x1=Math.max(x1,q.x+q.w);y1=Math.max(y1,q.y+q.h)});
+  return {L:x1-x0,W:y1-y0,H:b.height};
+}
+function isoSVG(b){
+  const c=Math.cos(Math.PI/6),P=(x,y,z)=>[(x-y)*c,(x+y)*0.5-z];
+  const pal=b.pallet;let minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9;
+  const poly=(pts,fill,extra="")=>{const q=pts.map(p=>P(...p));q.forEach(([x,y])=>{minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y)});
+    return `<polygon points="${q.map(p=>p[0].toFixed(2)+","+p[1].toFixed(2)).join(" ")}" fill="${fill}" ${extra}/>`};
+  const faces=(x,y,z,w,h,d,fill,stroke)=>{const X=x+w,Y=y+h,Z=z+d,st=`stroke="${stroke}" stroke-width=".5" stroke-linejoin="round"`;
+    return poly([[x,y,Z],[X,y,Z],[X,Y,Z],[x,Y,Z]],fill,st)+
+      poly([[X,y,z],[X,Y,z],[X,Y,Z],[X,y,Z]],fill,st)+poly([[X,y,z],[X,Y,z],[X,Y,Z],[X,y,Z]],"#000",'opacity=".2"')+
+      poly([[x,Y,z],[X,Y,z],[X,Y,Z],[x,Y,Z]],fill,st)+poly([[x,Y,z],[X,Y,z],[X,Y,Z],[x,Y,Z]],"#000",'opacity=".36"')};
+  let s=faces(0,0,0,pal.L,pal.W,pal.H,"var(--pallet)","rgba(0,0,0,.45)");
+  // fork openings on the two visible sides
+  const oz=pal.H*0.18,oh2=pal.H*0.62;
+  [[.12,.4],[.6,.88]].forEach(([a,e])=>{
+    s+=poly([[pal.L*a,pal.W,oz],[pal.L*e,pal.W,oz],[pal.L*e,pal.W,oz+oh2],[pal.L*a,pal.W,oz+oh2]],"rgba(0,0,0,.55)");
+    s+=poly([[pal.L,pal.W*a,oz],[pal.L,pal.W*e,oz],[pal.L,pal.W*e,oz+oh2],[pal.L,pal.W*a,oz+oh2]],"rgba(0,0,0,.45)")});
+  const bx=palletBoxes(b).sort((p,q)=>(p.z-q.z)||((p.x+p.w/2+p.y+p.h/2)-(q.x+q.w/2+q.y+q.h/2)));
+  bx.forEach(q=>{s+=faces(q.x,q.y,q.z,q.w,q.h,q.d,color(q.sku),"rgba(0,0,0,.4)")});
+  const pad=4;
+  return `<svg viewBox="${(minX-pad).toFixed(1)} ${(minY-pad).toFixed(1)} ${(maxX-minX+pad*2).toFixed(1)} ${(maxY-minY+pad*2).toFixed(1)}" role="img" aria-label="Finished pallet P${b.id}, ${fmt(b.height,1)} inches tall">${s}</svg>`;
+}
+function truckSVG(T,t,ti){
+  const pad=14, top=22, vbW=T.L+pad*2+28, vbH=T.W+top+pad+20;
+  let s=`<text x="${pad}" y="14" font-size="11" fill="var(--muted)" font-family="var(--f-mono)">NOSE ◀</text>
+   <text x="${T.L+pad}" y="14" font-size="11" fill="var(--muted)" font-family="var(--f-mono)" text-anchor="end">▶ DOORS</text>
+   <rect x="${pad}" y="${top}" width="${T.L}" height="${T.W}" fill="var(--panel)" stroke="var(--truck)" stroke-width="3"/>
+   <line x1="${pad+T.L/2}" x2="${pad+T.L/2}" y1="${top}" y2="${top+T.W}" stroke="var(--truck)" stroke-dasharray="4 4"/>`;
+  for(const p of t.units){
+    const u=p.u, first=u.items[0];
+    const kinds=[...new Set(u.items.flatMap(b=>b.layers.map(l=>l.sku.idx)))];
+    const x=pad+p.x+1, y=top+p.y+1, w=p.dl-2, h=p.dw-2;
+    // stripe fill by SKUs on the pallet
+    const sw=w/kinds.length;
+    kinds.forEach((k,i)=>{s+=`<rect x="${x+i*sw}" y="${y}" width="${sw}" height="${h}" fill="${color(k)}" opacity=".85"/>`});
+    s+=`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="var(--ink)" stroke-width="${u.items.length>1?3:1.2}"/>`;
+    const label=u.items.map(b=>"P"+b.id).join("/");
+    const fs=Math.max(5,Math.min(11,w/(label.length*0.68),h/3.4));
+    s+=`<text x="${x+w/2}" y="${y+h/2-fs*0.15}" font-size="${fs}" text-anchor="middle" fill="#fff" font-family="var(--f-mono)" font-weight="600" paint-order="stroke" stroke="rgba(0,0,0,.6)" stroke-width="${fs/4}">${label}</text>
+        <text x="${x+w/2}" y="${y+h/2+fs*0.95}" font-size="${fs*0.78}" text-anchor="middle" fill="#fff" font-family="var(--f-mono)" paint-order="stroke" stroke="rgba(0,0,0,.6)" stroke-width="${fs/4}">${fmt(u.wt)}#</text>`;
+  }
+  // length scale
+  const sy=top+T.W+14;
+  s+=`<line x1="${pad}" x2="${pad+T.L}" y1="${sy}" y2="${sy}" stroke="var(--muted)"/>`;
+  for(let f=0;f*12<=T.L;f+=5){const x=pad+f*12;s+=`<line x1="${x}" x2="${x}" y1="${sy-3}" y2="${sy+3}" stroke="var(--muted)"/>`;
+    if(f%10===0)s+=`<text x="${x}" y="${sy+14}" font-size="9" text-anchor="middle" fill="var(--muted)" font-family="var(--f-mono)">${f} ft</text>`}
+  return `<svg viewBox="0 0 ${vbW} ${vbH+6}" role="img" aria-label="Truck ${ti+1} floor plan">${s}</svg>`;
+}
+
+/* ---------- RENDER: results ---------- */
+function groupBuilt(built){const rows=[];
+  for(const b of built){const prev=rows[rows.length-1];
+    const sig=b.type==="full"?b.pallet.id+"|"+b.layers.map(l=>l.sku.idx+":"+l.cases).join(","):null;
+    if(sig&&prev&&prev.sig===sig){prev.list.push(b)}else rows.push({sig,list:[b]})}
+  return rows}
+function renderResults(){
+  const R=plan(); const TL=loadTruck(R.built); LAST={R,TL};
+  const totalCases=R.built.reduce((a,b)=>a+b.cases,0), totalWt=R.built.reduce((a,b)=>a+b.weight,0);
+  const positions=TL.trucks.reduce((a,t)=>a+t.positions,0);
+  const lastT=TL.trucks[TL.trucks.length-1];
+  const lenUsed=lastT?lastT.used:0;
+  const maxH=Math.max(state.stackInclPallet?state.stackH:state.stackH+Math.max(...state.pallets.map(p=>p.H||0)),...R.built.map(b=>b.height),1);
+  const warn=[...R.warnings,...TL.warnings];
+  let h="";
+  if(warn.length) h+=warn.map(w=>`<div class="alert">${w}</div>`).join("");
+  h+=`<div class="tiles">
+    <div class="tile hl"><span class="k">Pallets</span><span class="v">${R.built.length}</span><span class="s">${R.built.filter(b=>b.type==="full").length} full · ${R.built.filter(b=>b.type!=="full").length} mixed/partial</span></div>
+    <div class="tile hl"><span class="k">Trucks</span><span class="v">${TL.trucks.filter(t=>t.units.length).length||0}</span><span class="s">${positions} floor spots used</span></div>
+    <div class="tile"><span class="k">Packages</span><span class="v">${fmt(totalCases)}</span><span class="s">${state.packages.length} sizes</span></div>
+    <div class="tile"><span class="k">Gross weight</span><span class="v">${fmt(totalWt)}</span><span class="s">lb incl. pallets</span></div>
+  </div>`;
+
+  // Ti x Hi cards
+  h+=`<section class="panel"><div class="panel-head"><h2>Ti × Hi by package</h2><span class="hint">Ti = packages per layer · Hi = layers</span></div><div class="cards">`;
+  for(const r of R.skus){
+    const s=r.sku,res=r.res;
+    if(!res){h+=`<div class="card"><div class="item-head"><span class="swatch" style="background:${color(s.idx)}"></span><h3>${esc(s.name)}</h3></div><p class="hint">Doesn't fit. Check dimensions, stack height and pallet weight limit.</p></div>`;continue}
+    const fullP={pallet:res.pallet,footL:res.pallet.L+2*state.overhang,height:res.pallet.H+res.hi*res.h,layers:Array.from({length:res.hi},()=>({sku:s,cases:res.ti,h:res.h,res}))};
+    const eff=(res.ti*res.l*res.w)/(res.pallet.L*res.pallet.W)*100;
+    h+=`<div class="card">
+      <div class="item-head"><span class="swatch" style="background:${color(s.idx)}"></span><h3>${esc(s.name)}</h3><span class="pill" style="margin-left:auto">${esc(res.pallet.name)}</span></div>
+      <div class="tihi">${res.ti} × ${res.hi}<small>= ${res.cases} PER PALLET</small></div>
+      <div class="figs"><figure>${layerSVG(res,s.idx)}<figcaption>Layer, top view</figcaption></figure>
+        <figure>${sideSVG(fullP,maxH)}<figcaption>Side view · red = max height</figcaption></figure></div>
+      <dl class="kv">
+        <dt>Placed as</dt><dd>${res.l}×${res.w} footprint, ${res.h} in up</dd>
+        <dt>Layer coverage</dt><dd>${fmt(eff,1)}%</dd>
+        <dt>Pallet height</dt><dd>${fmt(res.pallet.H+res.hi*res.h,1)} in</dd>
+        <dt>Pallet weight</dt><dd>${fmt(res.cases*s.wt+res.pallet.tare)} lb</dd>
+        <dt>Limited by</dt><dd>${res.limitedBy==="weight"?'<span class="pill warn">weight</span>':"height"}</dd>
+        <dt>${fmt(s.qty)} to ship</dt><dd>${r.full} full + ${fmt(r.rem)} left over</dd>
+      </dl></div>`;
+  }
+  h+=`</div></section>`;
+
+  // Finished pallets
+  const loc0=new Map();TL.trucks.forEach((t,ti)=>t.units.forEach(u=>u.u.items.forEach(b=>loc0.set(b.id,ti+1))));
+  h+=`<section class="panel"><div class="panel-head"><h2>Finished pallets</h2><span class="hint">One sheet per pallet build · every other layer turned for interlock</span></div><div class="cards fin">`;
+  for(const r of groupBuilt(R.built)){
+    const b=r.list[0],n=r.list.length,d=finishedDims(b);
+    const ids=n>1?`P${b.id}–P${r.list[n-1].id}`:`P${b.id}`;
+    const pill=b.type==="full"?'<span class="pill">Full</span>':b.type==="mixed"?'<span class="pill mix">Mixed</span>':'<span class="pill">Partial</span>';
+    const counts=new Map();b.layers.forEach(l=>counts.set(l.sku.idx,(counts.get(l.sku.idx)||0)+l.cases));
+    const net=b.weight-b.pallet.tare, cube=d.L*d.W*d.H/1728;
+    const tr=[...new Set(r.list.map(x=>loc0.get(x.id)).filter(Boolean))].map(t=>"Truck "+t).join(", ");
+    const over=d.H>(state.stackInclPallet?state.stackH:state.stackH+b.pallet.H)+1e-6;
+    h+=`<div class="card">
+      <div class="panel-head"><span class="mono" style="font-weight:600">${ids}</span><span>${n>1?`<span class="pill">× ${n}</span> `:""}${pill}</span></div>
+      <figure class="iso">${isoSVG(b)}</figure>
+      <div class="dims mono">${fmt(d.L,1)} × ${fmt(d.W,1)} × ${fmt(d.H,1)} in</div>
+      <dl class="kv">
+        <dt>Overall L × W</dt><dd>${fmt(d.L,1)} × ${fmt(d.W,1)} in</dd>
+        <dt>Overall height</dt><dd>${fmt(d.H,1)} in${over?' <span class="pill warn">over</span>':""}</dd>
+        <dt>Gross weight</dt><dd><b>${fmt(b.weight)} lb</b></dd>
+        <dt>Product weight</dt><dd>${fmt(net)} lb</dd>
+        <dt>Pallet (${esc(b.pallet.name)})</dt><dd>${fmt(b.pallet.tare)} lb</dd>
+        <dt>Packages · layers</dt><dd>${b.cases} · ${b.layers.length}</dd>
+        <dt>Cube</dt><dd>${fmt(cube,1)} ft³</dd>
+        ${n>1?`<dt>All ${n} pallets</dt><dd>${fmt(b.weight*n)} lb</dd>`:""}
+        <dt>Loaded on</dt><dd>${tr||"–"}</dd>
+      </dl>
+      <div class="legend">${[...counts].map(([k,c])=>`<span><i class="swatch" style="background:${color(k)}"></i>${esc(state.packages[k].name)} × ${c}</span>`).join("")}</div>
+    </div>`;
+  }
+  h+=`</div></section>`;
+
+  // Truck
+  h+=`<section class="panel"><div class="panel-head"><h2>Truck load plan</h2>
+    <span class="hint">${fmt(TL.T.L/12,1)} ft × ${fmt(TL.T.W,1)} in · ${state.dbl?"double-stacking on":"single-stacked"}</span></div>`;
+  TL.trucks.forEach((t,i)=>{
+    if(!t.units.length) return;
+    const fp=t.wt?t.front/t.wt*100:0;
+    h+=`<div class="col">
+      <div class="panel-head"><h3>Truck ${i+1}</h3>
+        <span class="mono hint">${t.pallets} pallets · ${fmt(t.wt)} / ${fmt(TL.T.max)} lb · ${fmt(t.used/12,1)} of ${fmt(TL.T.L/12,1)} ft used</span></div>
+      <div class="truckwrap">${truckSVG(TL.T,t,i)}</div>
+      <div class="balance"><div class="bar"><i style="width:${fp}%;background:var(--c2)"></i><i style="width:${100-fp}%;background:var(--c1)"></i></div>
+      <span class="hint">Front half ${fmt(t.front)} lb (${fmt(fp,0)}%) · rear half ${fmt(t.rear)} lb (${fmt(100-fp,0)}%). Heaviest pallets load first, toward the nose. Aim for close to even.</span></div>
+    </div>`;
+  });
+  h+=`<div class="legend">${state.packages.map((p,i)=>`<span><i class="swatch" style="background:${color(i)}"></i>${esc(p.name)}</span>`).join("")}<span class="hint">Thick outline = double stack · # = lb</span></div></section>`;
+
+  // Pallet build list
+  h+=`<section class="panel"><div class="panel-head"><h2>Pallet build list</h2><span class="hint">Layers listed bottom to top</span></div>
+   <div class="tablewrap"><table><thead><tr><th>Pallets</th><th class="n">Qty</th><th>Type</th><th>Base</th><th>Contents (each)</th><th class="n">Layers</th><th class="n">Pkgs</th><th class="n">Height in</th><th class="n">Weight lb</th><th>Truck</th></tr></thead><tbody>`;
+  const loc=new Map();TL.trucks.forEach((t,ti)=>t.units.forEach(u=>u.u.items.forEach(b=>loc.set(b.id,ti+1))));
+  const rows=groupBuilt(R.built);
+  for(const r of rows){
+    const b=r.list[0],n=r.list.length;
+    const counts=new Map();b.layers.forEach(l=>counts.set(l.sku.idx,(counts.get(l.sku.idx)||0)+l.cases));
+    const contents=[...counts].map(([k,c])=>`<span style="display:inline-flex;align-items:center;gap:4px;margin-right:8px"><i class="swatch" style="background:${color(k)}"></i>${esc(state.packages[k].name)} × ${c}</span>`).join("");
+    const pill=b.type==="full"?'<span class="pill">Full</span>':b.type==="mixed"?'<span class="pill mix">Mixed</span>':'<span class="pill">Partial</span>';
+    const ids=n>1?`P${b.id}–P${r.list[n-1].id}`:`P${b.id}`;
+    const tr=[...new Set(r.list.map(x=>loc.get(x.id)).filter(Boolean))].map(t=>"T"+t).join(", ");
+    h+=`<tr><td class="mono">${ids}</td><td class="n">${n}</td><td>${pill}</td><td>${esc(b.pallet.name)}</td><td>${contents}</td><td class="n">${b.layers.length}</td><td class="n">${b.cases}</td><td class="n">${fmt(b.height,1)}</td><td class="n">${fmt(b.weight)}</td><td class="mono">${tr||"–"}</td></tr>`;
+  }
+  h+=`</tbody></table></div>`;
+  h+=`<p class="hint">Mixed pallets put the heaviest full layers on the bottom and partial layers on top. Partial layers are shown at their share of the pallet length.</p></section>`;
+  $("results").innerHTML=h;
+}
+
+/* ---------- PDF REPORT ---------- */
+let LAST=null;
+const LIGHT={"--bg":"#eef0f2","--panel":"#ffffff","--ink":"#1d232b","--muted":"#5b6672","--line":"#d3d8de","--soft":"#e4e8ec",
+  "--accent":"#f2b705","--warn":"#b4401f","--pallet":"#9a7b52","--truck":"#c9cfd6","--truck-floor":"#f7f8f9",
+  "--c1":"#c98a4b","--c2":"#4f7fb0","--c3":"#6f9a54","--c4":"#a35d8f","--c5":"#c4a23a","--c6":"#4b9a99","--c7":"#b4573d","--c8":"#7a6fb0",
+  "--f-mono":"Menlo, Consolas, monospace"};
+function svgToPng(svg,pxW){
+  return new Promise((ok,fail)=>{
+    const vb=svg.match(/viewBox="([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+)"/);
+    const vw=+vb[3],vh=+vb[4],W=pxW,H=Math.round(pxW*vh/vw);
+    let str=svg.replace(/var\((--[\w-]+)\)/g,(m,k)=>LIGHT[k]||"#888")
+      .replace("<svg ",`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" `);
+    const url=URL.createObjectURL(new Blob([str],{type:"image/svg+xml"}));
+    const img=new Image();
+    img.onload=()=>{const cv=document.createElement("canvas");cv.width=W;cv.height=H;const g=cv.getContext("2d");
+      g.fillStyle="#fff";g.fillRect(0,0,W,H);g.drawImage(img,0,0,W,H);URL.revokeObjectURL(url);ok({data:cv.toDataURL("image/png"),ratio:vh/vw})};
+    img.onerror=()=>{URL.revokeObjectURL(url);fail(new Error("Couldn't draw a picture for the PDF."))};
+    img.src=url;
+  });
+}
+const hex=c=>{const v=(LIGHT[c.replace(/var\((--[\w-]+)\)/,"$1")]||"#888888").slice(1);return [0,2,4].map(i=>parseInt(v.slice(i,i+2),16))};
+async function buildPdf(){
+  const {R,TL}=LAST; const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:"pt",format:"letter"}); const PW=612,PH=792,M=40,CW=PW-2*M;
+  let y=M;
+  const ink=[29,35,43],muted=[91,102,114];
+  const need=h=>{if(y+h>PH-M){doc.addPage();y=M}};
+  const heading=(t,next=0)=>{need(40+next);y+=6;doc.setFont("helvetica","bold");doc.setFontSize(13);doc.setTextColor(...ink);doc.text(t.toUpperCase(),M,y+12);
+    doc.setDrawColor(242,183,5);doc.setLineWidth(2);doc.line(M,y+18,M+CW,y+18);y+=30};
+  const kv=(x,yy,w,pairs)=>{doc.setFontSize(8.5);pairs.forEach(([k,v],i)=>{doc.setFont("helvetica","normal");doc.setTextColor(...muted);doc.text(k,x,yy+i*12);
+    doc.setTextColor(...ink);doc.setFont("courier","normal");doc.text(String(v),x+w,yy+i*12,{align:"right"})});return pairs.length*12};
+  const date=new Date().toLocaleString();
+  // Title block
+  doc.setFillColor(29,35,43);doc.rect(0,0,PW,64,"F");doc.setFillColor(242,183,5);doc.rect(0,64,PW,5,"F");
+  doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(22);doc.text("Ti:Hi Builder",M,38);
+  doc.setFont("helvetica","normal");doc.setFontSize(10);doc.text("Load report  \u00b7  "+date,M+CW,38,{align:"right"});
+  y=92;
+  const totalCases=R.built.reduce((a,b)=>a+b.cases,0),totalWt=R.built.reduce((a,b)=>a+b.weight,0);
+  const nTrucks=TL.trucks.filter(t=>t.units.length).length;
+  const tiles=[["Pallets",R.built.length],["Trucks",nTrucks],["Packages",fmt(totalCases)],["Gross weight",fmt(totalWt)+" lb"]];
+  const tw=(CW-30)/4;
+  tiles.forEach(([k,v],i)=>{const x=M+i*(tw+10);doc.setDrawColor(211,216,222);doc.setLineWidth(.8);doc.rect(x,y,tw,46);
+    doc.setFillColor(242,183,5);doc.rect(x,y+43,tw,3,"F");
+    doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...muted);doc.text(k.toUpperCase(),x+8,y+13);
+    doc.setFont("helvetica","bold");doc.setFontSize(17);doc.setTextColor(...ink);doc.text(String(v),x+8,y+34)});
+  y+=62;
+  doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...muted);
+  const settings=`Max stack height ${state.stackH} in ${state.stackInclPallet?"(includes pallet)":"(product only, pallet added)"}  \u00b7  Overhang ${state.overhang} in/side  \u00b7  ${state.allowTip?"Packages may lie on side":"Packages kept upright"}  \u00b7  Truck ${fmt(state.tL/12,1)} ft x ${state.tW} x ${state.tH} in, max ${fmt(state.tMax)} lb  \u00b7  ${state.dbl?"Double-stacking allowed":"Single-stacked"}`;
+  const lines=doc.splitTextToSize(settings,CW);doc.text(lines,M,y);y+=lines.length*11+8;
+  heading("Packages and Ti x Hi");
+  doc.autoTable({startY:y,margin:{left:M,right:M},theme:"grid",styles:{fontSize:8.5,cellPadding:4,textColor:ink,lineColor:[211,216,222]},
+    headStyles:{fillColor:[29,35,43],textColor:255,fontStyle:"bold"},
+    head:[["Package","L x W x H in","Wt lb","Qty","Pallet","Ti","Hi","Per pallet","Full","Left over"]],
+    body:R.skus.map(r=>{const s=r.sku,x=r.res;return [s.name,`${s.L} x ${s.W} x ${s.H}`,fmt(s.wt,1),fmt(s.qty),x?x.pallet.name:"-",x?x.ti:"-",x?x.hi:"-",x?x.cases:"-",r.full,fmt(r.rem)]}),
+    columnStyles:{2:{halign:"right"},3:{halign:"right"},5:{halign:"right"},6:{halign:"right"},7:{halign:"right"},8:{halign:"right"},9:{halign:"right"}}});
+  y=doc.lastAutoTable.finalY+16;
+  // Layer patterns, 3 per row
+  heading("Layer patterns (top view)",200);
+  const lw=(CW-2*16)/3;
+  const withRes=R.skus.filter(r=>r.res);
+  for(let i=0;i<withRes.length;i+=3){
+    const row=withRes.slice(i,i+3);const imgs=await Promise.all(row.map(r=>svgToPng(layerSVG(r.res,r.sku.idx),600)));
+    const ih=Math.max(...imgs.map(m=>lw*m.ratio));need(ih+70);
+    row.forEach((r,j)=>{const x=M+j*(lw+16);const c=hex(color(r.sku.idx));
+      doc.setFillColor(...c);doc.rect(x,y,8,8,"F");doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(...ink);doc.text(r.sku.name,x+12,y+7.5);
+      doc.addImage(imgs[j].data,"PNG",x,y+14,lw,lw*imgs[j].ratio);
+      const yy=y+20+ih;doc.setFontSize(12);doc.text(`${r.res.ti} x ${r.res.hi} = ${r.res.cases}`,x,yy+6);
+      kv(x,yy+20,lw,[["Placed as",`${r.res.l}x${r.res.w}, ${r.res.h} up`],["Limited by",r.res.limitedBy]])});
+    y+=ih+70;
+  }
+  // Finished pallets, 2 per row
+  heading("Finished pallets",300);
+  const groups=groupBuilt(R.built), fw=(CW-20)/2;
+  for(let i=0;i<groups.length;i+=2){
+    const row=groups.slice(i,i+2);const imgs=await Promise.all(row.map(g=>svgToPng(isoSVG(g.list[0]),700)));
+    const ih=150;need(ih+150);
+    row.forEach((g,j)=>{const b=g.list[0],n=g.list.length,d=finishedDims(b),x=M+j*(fw+20);
+      doc.setDrawColor(211,216,222);doc.setLineWidth(.8);doc.rect(x,y,fw,ih+140);
+      const ids=n>1?`P${b.id}-P${g.list[n-1].id}  (x${n})`:`P${b.id}`;
+      doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(...ink);doc.text(ids,x+8,y+15);
+      doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...muted);doc.text(b.type.toUpperCase(),x+fw-8,y+15,{align:"right"});
+      const m=imgs[j];let iw=fw-16,h2=iw*m.ratio;if(h2>ih){h2=ih;iw=ih/m.ratio}
+      doc.addImage(m.data,"PNG",x+(fw-iw)/2,y+22,iw,h2);
+      let yy=y+ih+34;doc.setFont("courier","bold");doc.setFontSize(11);doc.setTextColor(...ink);
+      doc.text(`${fmt(d.L,1)} x ${fmt(d.W,1)} x ${fmt(d.H,1)} in`,x+fw/2,yy,{align:"center"});
+      const counts=new Map();b.layers.forEach(l=>counts.set(l.sku.idx,(counts.get(l.sku.idx)||0)+l.cases));
+      const tr=[...new Set(g.list.map(p=>{let t0=0;TL.trucks.forEach((t,ti)=>t.units.forEach(u=>u.u.items.forEach(q=>{if(q.id===p.id)t0=ti+1})));return t0}).filter(Boolean))].map(t=>"Truck "+t).join(", ");
+      const pairs=[["Gross weight",fmt(b.weight)+" lb"],["Product / pallet",`${fmt(b.weight-b.pallet.tare)} / ${fmt(b.pallet.tare)} lb`],
+        ["Packages / layers",`${b.cases} / ${b.layers.length}`],["Cube",fmt(d.L*d.W*d.H/1728,1)+" cu ft"],
+        ["Contents",[...counts].map(([k,c])=>`${state.packages[k].name} x ${c}`).join(", ")],["Loaded on",tr||"-"]];
+      if(n>1)pairs.splice(1,0,[`All ${n} pallets`,fmt(b.weight*n)+" lb"]);
+      kv(x+8,yy+16,fw-16,pairs)});
+    y+=ih+150;
+  }
+  // Trucks
+  heading("Truck load plan",160);
+  for(let i=0;i<TL.trucks.length;i++){const t=TL.trucks[i];if(!t.units.length)continue;
+    const m=await svgToPng(truckSVG(TL.T,t,i),1600);const ih=CW*m.ratio;need(ih+50);
+    doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...ink);doc.text(`Truck ${i+1}`,M,y+10);
+    doc.setFont("courier","normal");doc.setFontSize(8.5);doc.setTextColor(...muted);
+    doc.text(`${t.pallets} pallets  ${fmt(t.wt)} / ${fmt(TL.T.max)} lb  ${fmt(t.used/12,1)} of ${fmt(TL.T.L/12,1)} ft used`,M+CW,y+10,{align:"right"});
+    doc.addImage(m.data,"PNG",M,y+16,CW,ih);
+    const fp=t.wt?t.front/t.wt*100:0;
+    doc.setFont("helvetica","normal");doc.text(`Front half ${fmt(t.front)} lb (${fmt(fp)}%)  \u00b7  rear half ${fmt(t.rear)} lb (${fmt(100-fp)}%)`,M,y+ih+28);
+    y+=ih+44;
+  }
+  // Build list
+  heading("Pallet build list",60);
+  doc.autoTable({startY:y,margin:{left:M,right:M},theme:"grid",styles:{fontSize:8.5,cellPadding:4,textColor:ink,lineColor:[211,216,222]},
+    headStyles:{fillColor:[29,35,43],textColor:255,fontStyle:"bold"},
+    head:[["Pallets","Qty","Type","Base","Contents (each)","Pkgs","Height in","Weight lb"]],
+    body:groups.map(g=>{const b=g.list[0],n=g.list.length;const counts=new Map();b.layers.forEach(l=>counts.set(l.sku.idx,(counts.get(l.sku.idx)||0)+l.cases));
+      return [n>1?`P${b.id}-P${g.list[n-1].id}`:`P${b.id}`,n,b.type,b.pallet.name,[...counts].map(([k,c])=>`${state.packages[k].name} x ${c}`).join(", "),b.cases,fmt(b.height,1),fmt(b.weight)]}),
+    columnStyles:{1:{halign:"right"},5:{halign:"right"},6:{halign:"right"},7:{halign:"right"}}});
+  const pages=doc.getNumberOfPages();
+  for(let p=1;p<=pages;p++){doc.setPage(p);doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...muted);
+    doc.text(`Ti:Hi Builder  \u00b7  ${date}`,M,PH-20);doc.text(`Page ${p} of ${pages}`,PW-M,PH-20,{align:"right"})}
+  return doc.output("blob");
+}
+window.__tihi_pdf=buildPdf;
+$("pdfBtn").addEventListener("click",async()=>{
+  const btn=$("pdfBtn"),msg=$("pdfMsg");const say=t=>{msg.textContent=t;msg.hidden=!t};
+  if(!window.jspdf){say("The PDF tools didn't load. Reload the page and try again.");return}
+  btn.disabled=true;btn.textContent="Building PDF...";say("");
+  try{
+    const blob=await buildPdf();
+    const stamp=new Date().toISOString().slice(0,10);
+    const url=URL.createObjectURL(blob),a=document.createElement("a");
+    a.href=url;a.download=`TiHi-load-report-${stamp}.pdf`;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+    say("PDF downloaded.");
+  }catch(e){
+    const c=e&&e.code;
+    say(c==="declined"?"Download cancelled.":c==="rate_limited"?"A download prompt is already open.":"Couldn't make the PDF: "+((e&&e.message)||e));
+  }finally{btn.disabled=false;btn.textContent="Download PDF report"}
+});
+
+/* ---------- SAVED ITEMS LIBRARY ---------- */
+let LIBDB=null,LIBW=true,LIB=[],delArm=null;
+const libMsg=t=>{$("libMsg").textContent=t};
+const slug=n=>(String(n).toLowerCase().replace(/[^a-z0-9_-]+/g,"-").replace(/^-+|-+$/g,"").slice(0,80))||"item";
+function renderLib(){
+  const sel=$("libSel"),keep=sel.value;
+  sel.innerHTML=LIB.length?LIB.map(it=>`<option value="${esc(it.id)}">${esc(it.name)}  (${it.L}×${it.W}×${it.H} in, ${it.wt} lb)</option>`).join("")
+    :`<option value="">No saved items yet</option>`;
+  if(LIB.some(it=>it.id===keep))sel.value=keep;
+  $("libNames").innerHTML=LIB.map(it=>`<option value="${esc(it.name)}"></option>`).join("");
+  sel.disabled=!LIB.length;$("libAdd").disabled=!LIB.length;
+  $("libList").innerHTML=LIB.length?LIB.map(it=>`<div class="lib-item"><span>${esc(it.name)} <span class="mono">${it.L}×${it.W}×${it.H} in · ${it.wt} lb</span></span>
+    ${LIBW?`<button type="button" class="x" data-libdel="${esc(it.id)}">${delArm===it.id?"Confirm remove":"Remove"}</button>`:""}</div>`).join("")
+    :`<p class="hint">Nothing saved yet.</p>`;
+  document.querySelectorAll("#pkgList button.save").forEach(b=>b.disabled=!(LIBDB&&LIBW));
+}
+const CFG=window.TIHI_CONFIG||{};
+const sb=(window.supabase&&CFG.url&&CFG.anonKey)?window.supabase.createClient(CFG.url,CFG.anonKey):null;
+let PROFILE=null,IS_ADMIN=false,libStarted=false;
+const toItem=r=>({id:r.id,name:r.name,L:+r.length_in,W:+r.width_in,H:+r.height_in,wt:+r.weight_lb});
+async function loadLib(){
+  const {data,error}=await sb.from("items").select("id,name,length_in,width_in,height_in,weight_lb").order("name");
+  if(error){libMsg("Couldn't load your company's saved items.");return}
+  LIB=data.map(toItem);renderLib();
+}
+function initLib(){
+  LIBDB=sb;LIBW=true;
+  if(!libStarted){libStarted=true;window.addEventListener("focus",()=>{if(PROFILE)loadLib()})}
+  loadLib();
+}
+const libApi={
+  async save(name,p){const ex=LIB.find(it=>it.name.trim().toLowerCase()===name.toLowerCase());
+    const row={name,length_in:p.L,width_in:p.W,height_in:p.H,weight_lb:p.wt||0,updated_by:PROFILE.id,updated_at:new Date().toISOString()};
+    const q=ex?sb.from("items").update(row).eq("id",ex.id):sb.from("items").insert({...row,company_id:PROFILE.company_id});
+    const {error}=await q;if(error)throw error;await loadLib();return !!ex},
+  async remove(id){const {error}=await sb.from("items").delete().eq("id",id);if(error)throw error;await loadLib()}
+};
+$("pkgList").addEventListener("click",async e=>{
+  const i=e.target.dataset.save;if(i===undefined||!LIBDB)return;
+  const p=state.packages[+i];const name=String(p.name).trim()||"Item";
+  if(!(p.L>0&&p.W>0&&p.H>0)){libMsg("Enter L, W and H before saving "+name+".");return}
+  e.target.disabled=true;
+  try{const existed=await libApi.save(name,p);libMsg((existed?"Updated ":"Saved ")+name+" for "+(PROFILE.companies?PROFILE.companies.name:"your company")+".")}
+  catch(err){libMsg("Couldn't save "+name+": "+(err.message||"try again in a moment."))}
+  finally{e.target.disabled=!(LIBDB&&LIBW)}
+});
+$("libAdd").addEventListener("click",()=>{
+  const it=LIB.find(x=>x.id===$("libSel").value);if(!it)return;
+  if(state.packages.length>=20){libMsg("The list holds up to 20 package sizes.");return}
+  state.packages.push({name:it.name,L:+it.L,W:+it.W,H:+it.H,wt:+it.wt,qty:100,pallet:"auto"});
+  $("pkgCount").value=state.packages.length;renderPkgs();rerender();libMsg(`Added ${it.name}. Set the quantity to ship.`);
+  const q=$("pk-qty-"+(state.packages.length-1));if(q){q.focus();q.select()}
+});
+$("libList").addEventListener("click",async e=>{
+  const id=e.target.dataset.libdel;if(!id||!LIBDB)return;
+  if(delArm!==id){delArm=id;renderLib();return}
+  delArm=null;
+  try{await libApi.remove(id);libMsg("Removed.")}catch(err){libMsg("Couldn't remove that item.")}
+});
+
+/* ---------- ACCOUNTS ---------- */
+const views={auth:$("authView"),pending:$("pendingView"),app:$("appView")};
+const show=v=>Object.entries(views).forEach(([k,el])=>el.hidden=k!==v);
+const BLOCKED=["gmail.com","googlemail.com","yahoo.com","hotmail.com","outlook.com","live.com","msn.com","aol.com","icloud.com","me.com","mac.com","proton.me","protonmail.com","gmx.com","mail.com","yandex.com","zoho.com"];
+function authMsg(t,kind){const m=$("authMsg");m.textContent=t||"";m.hidden=!t;m.className="msg"+(kind?" "+kind:"")}
+function authTab(which){
+  $("tabIn").setAttribute("aria-pressed",which==="in");$("tabUp").setAttribute("aria-pressed",which==="up");
+  $("signInForm").hidden=which!=="in";$("signUpForm").hidden=which!=="up";$("resetForm").hidden=which!=="reset";
+  document.querySelector("#authView .tabs").hidden=which==="reset";authMsg("");
+}
+let routing=null;
+async function route(){
+  if(routing)return routing;
+  routing=(async()=>{
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session){PROFILE=null;show("auth");return}
+    const {data:prof,error}=await sb.from("profiles").select("id,username,email,role,company_id,companies(name,status,email_domain)").eq("id",session.user.id).maybeSingle();
+    if(error||!prof){show("auth");authMsg("We couldn't find your account details. Try signing in again, or create an account.","err");await sb.auth.signOut();return}
+    PROFILE=prof;
+    const {data:adm}=await sb.from("app_admins").select("user_id").eq("user_id",prof.id).maybeSingle();
+    IS_ADMIN=!!adm;
+    const c=prof.companies||{};
+    if(c.status!=="approved"&&!IS_ADMIN){
+      $("pendingText").textContent=c.status==="rejected"
+        ?`${c.name} (${c.email_domain}) wasn't approved for Ti:Hi Builder. Contact the site admin if you think this is a mistake.`
+        :`Your email is verified. ${c.name} (${c.email_domain}) is waiting for approval. You can use the app as soon as it's approved.`;
+      show("pending");return}
+    $("acctUser").textContent=prof.username;$("acctCompany").textContent=c.name+(c.status!=="approved"?" (not yet approved)":"");
+    $("adminBtn").hidden=!IS_ADMIN;
+    show("app");initLib();
+  })();
+  try{await routing}finally{routing=null}
+}
+async function loadCompanies(){
+  const {data,error}=await sb.from("companies").select("id,name,email_domain,status,created_at").order("created_at",{ascending:false});
+  const box=$("companyList");
+  if(error){box.innerHTML=`<p class="hint">Couldn't load companies.</p>`;return}
+  const order={pending:0,approved:1,rejected:2};data.sort((a,b)=>order[a.status]-order[b.status]);
+  box.innerHTML=data.length?data.map(c=>`<div class="company-row"><div><b>${esc(c.name)}</b> <span class="mono hint">@${esc(c.email_domain)}</span>
+    <span class="pill${c.status==="pending"?" mix":c.status==="rejected"?" warn":""}">${c.status}</span></div>
+    <div class="acts">${c.status!=="approved"?`<button type="button" class="primary" data-cid="${c.id}" data-st="approved">Approve</button>`:""}
+    ${c.status!=="rejected"?`<button type="button" data-cid="${c.id}" data-st="rejected">Reject</button>`:""}</div></div>`).join(""):`<p class="hint">No companies yet.</p>`;
+}
+if(!sb){
+  show("auth");$("signInForm").hidden=true;$("signUpForm").hidden=true;document.querySelector("#authView .tabs").hidden=true;
+  authMsg("This site isn't connected to its database yet. Add the Supabase URL and anon key to config.js.","err");
+}else{
+  $("tabIn").addEventListener("click",()=>authTab("in"));
+  $("tabUp").addEventListener("click",()=>authTab("up"));
+  $("signInForm").addEventListener("submit",async e=>{e.preventDefault();
+    const email=$("inEmail").value.trim(),password=$("inPass").value;
+    if(!email||!password){authMsg("Enter your email and password.","err");return}
+    authMsg("Signing in...");
+    const {error}=await sb.auth.signInWithPassword({email,password});
+    if(error){authMsg(/confirm/i.test(error.message)?"Your email isn't verified yet. Click the link we emailed you, then sign in.":"That email and password don't match an account.","err");return}
+    authMsg("");route();
+  });
+  $("forgotBtn").addEventListener("click",async()=>{
+    const email=$("inEmail").value.trim();if(!email){authMsg("Enter your email above, then click Forgot password.","err");return}
+    const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+    authMsg(error?"Couldn't send the reset email. Try again in a minute.":`If ${email} has an account, a password reset link is on its way.`,error?"err":"ok");
+  });
+  $("signUpForm").addEventListener("submit",async e=>{e.preventDefault();
+    const username=$("upUser").value.trim(),company=$("upCompany").value.trim(),email=$("upEmail").value.trim().toLowerCase(),
+      pw=$("upPass").value,pw2=$("upPass2").value,dom=email.split("@")[1]||"";
+    if(username.length<3)return authMsg("Usernames need at least 3 characters.","err");
+    if(!/^[A-Za-z0-9._-]+$/.test(username))return authMsg("Usernames can use letters, numbers, dots, dashes and underscores.","err");
+    if(!company)return authMsg("Enter your company name.","err");
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))return authMsg("Enter a valid email address.","err");
+    if(BLOCKED.includes(dom))return authMsg("Please use your company email address. Personal addresses like @"+dom+" can't verify a company.","err");
+    if(pw.length<8)return authMsg("Passwords need at least 8 characters.","err");
+    if(pw!==pw2)return authMsg("The two passwords don't match.","err");
+    authMsg("Creating your account...");
+    const {data:free}=await sb.rpc("username_available",{u:username});
+    if(free===false)return authMsg("That username is taken. Try another.","err");
+    const {error}=await sb.auth.signUp({email,password:pw,options:{emailRedirectTo:location.origin+location.pathname,data:{username,company}}});
+    if(error)return authMsg("Couldn't create the account: "+error.message,"err");
+    $("signUpForm").reset();
+    authMsg(`Check ${email} for a verification link. After you click it, sign in here. If @${dom} is new to Ti:Hi Builder, the company is reviewed before you can start.`,"ok");
+  });
+  $("resetForm").addEventListener("submit",async e=>{e.preventDefault();
+    const pw=$("newPass").value;if(pw.length<8)return authMsg("Passwords need at least 8 characters.","err");
+    const {error}=await sb.auth.updateUser({password:pw});
+    if(error)return authMsg("Couldn't save the password: "+error.message,"err");
+    authTab("in");authMsg("Password updated. You're signed in.","ok");route();
+  });
+  $("signOutBtn").addEventListener("click",async()=>{await sb.auth.signOut();PROFILE=null;LIB=[];renderLib();show("auth");authTab("in")});
+  $("pendingOut").addEventListener("click",async()=>{await sb.auth.signOut();show("auth");authTab("in")});
+  $("pendingCheck").addEventListener("click",()=>route());
+  $("adminBtn").addEventListener("click",()=>{$("adminPanel").hidden=false;loadCompanies()});
+  $("adminClose").addEventListener("click",()=>{$("adminPanel").hidden=true});
+  $("companyList").addEventListener("click",async e=>{const id=e.target.dataset.cid;if(!id)return;
+    e.target.disabled=true;const {error}=await sb.rpc("set_company_status",{cid:id,new_status:e.target.dataset.st});
+    if(error)alertMsg("Couldn't update that company: "+error.message);await loadCompanies();if(id===PROFILE.company_id)route()});
+  sb.auth.onAuthStateChange((event)=>{
+    if(event==="PASSWORD_RECOVERY"){show("auth");authTab("reset");return}
+    if(event==="SIGNED_OUT"){show("auth");return}
+  });
+  route();
+}
+function alertMsg(t){const b=$("companyList");const p=document.createElement("p");p.className="msg err";p.textContent=t;b.prepend(p)}
+
+/* ---------- EVENTS ---------- */
+function rerender(){try{renderResults()}catch(e){$("results").innerHTML=`<div class="alert">Couldn't calculate: ${esc(e.message)}</div>`}}
+$("pkgCount").addEventListener("change",e=>{
+  let n=Math.max(1,Math.min(20,Math.floor(num(e.target.value,1))));e.target.value=n;
+  while(state.packages.length<n){const i=state.packages.length;state.packages.push({name:"Case "+LETTERS[i],L:12,W:12,H:12,wt:20,qty:100,pallet:"auto"})}
+  state.packages.length=n;renderPkgs();rerender();
+});
+$("pkgList").addEventListener("input",e=>{
+  const it=e.target.closest(".item"),f=e.target.dataset.f;if(!it||!f)return;
+  const p=state.packages[+it.dataset.i];
+  p[f]=(f==="name"||f==="pallet")?e.target.value:num(e.target.value);
+  if(f==="name"){const it=LIB.find(x=>String(x.name).trim().toLowerCase()===e.target.value.trim().toLowerCase());
+    if(it){const n=+e.target.closest(".item").dataset.i;
+      ["L","W","H","wt"].forEach(k=>{p[k]=+it[k];const el=$(`pk-${k}-${n}`);if(el)el.value=it[k]});libMsg(`Filled in ${it.name} from saved items.`)}}
+  rerender();
+});
+$("palList").addEventListener("input",e=>{
+  const it=e.target.closest(".item"),f=e.target.dataset.f;if(!it||!f)return;
+  const p=state.pallets[+it.dataset.p];
+  p[f]=f==="name"?e.target.value:num(e.target.value);
+  if(f==="name"){$("mixPallet").innerHTML=palletOptions(state.mixPallet,false);
+    document.querySelectorAll('#pkgList select[data-f="pallet"]').forEach((s,i)=>{s.innerHTML=palletOptions(state.packages[i].pallet,true)})}
+  rerender();
+});
+$("palList").addEventListener("click",e=>{
+  const d=e.target.dataset.del;if(d===undefined)return;
+  const gone=state.pallets.splice(+d,1)[0];
+  state.packages.forEach(p=>{if(p.pallet===gone.id)p.pallet="auto"});
+  if(state.mixPallet===gone.id)state.mixPallet=state.pallets[0].id;
+  renderPallets();renderPkgs();rerender();
+});
+$("addPallet").addEventListener("click",()=>{
+  const id="p"+(palSeq++);state.pallets.push({id,name:"Custom pallet "+state.pallets.length,L:48,W:48,H:5.5,tare:50,max:2500});
+  renderPallets();renderPkgs();rerender();
+  const el=$("pl-name-"+id);if(el){el.focus();el.select()}
+});
+const bindNum=(id,key)=>$(id).addEventListener("input",e=>{state[key]=num(e.target.value);rerender()});
+bindNum("stackH","stackH");bindNum("overhang","overhang");
+const bindTruckNum=(id,key)=>$(id).addEventListener("input",e=>{state[key]=num(e.target.value);state.truck="custom";$("truckPreset").value="custom";rerender()});
+bindTruckNum("tL","tL");bindTruckNum("tW","tW");bindTruckNum("tH","tH");bindTruckNum("tMax","tMax");
+$("stackInclPallet").addEventListener("change",e=>{state.stackInclPallet=e.target.checked;rerender()});
+$("allowTip").addEventListener("change",e=>{state.allowTip=e.target.checked;rerender()});
+$("dbl").addEventListener("change",e=>{state.dbl=e.target.checked;rerender()});
+$("mixPallet").addEventListener("change",e=>{state.mixPallet=e.target.value;rerender()});
+$("truckPreset").addEventListener("change",e=>{state.truck=e.target.value;const t=TRUCKS[e.target.value];
+  if(t){state.tL=t.L;state.tW=t.W;state.tH=t.H;state.tMax=t.max;syncGlobals()}rerender()});
+$("resetBtn").addEventListener("click",()=>{state=JSON.parse(JSON.stringify(EXAMPLE));palSeq=1;init()});
+function init(){syncGlobals();renderPkgs();renderPallets();rerender()}
+window.__tihi={layerPattern,plan:()=>plan(),loadTruck:b=>loadTruck(b),state:()=>state};
+init();
+})();
+</script>
+</body>
+</html>
