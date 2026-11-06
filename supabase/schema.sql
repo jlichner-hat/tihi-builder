@@ -61,6 +61,8 @@ language sql stable security definer set search_path = public, extensions as $$
 $$;
 
 -- On sign-up: match the email domain to a company (or create a pending one) and make the profile.
+-- Accounts created by hand in the Supabase dashboard have no username or company:
+-- the email name becomes the username and the email domain picks the company.
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public, extensions as $$
 declare
@@ -69,16 +71,25 @@ declare
   is_new boolean := false;
   uname text := nullif(trim(new.raw_user_meta_data->>'username'), '');
   cname text := nullif(trim(new.raw_user_meta_data->>'company'), '');
+  base text;
+  n int := 1;
 begin
   if exists (select 1 from public.blocked_domains where domain = dom::extensions.citext) then
     raise exception 'Please sign up with your company email address, not a personal one.';
   end if;
-  if uname is null then raise exception 'A username is required.'; end if;
-  if cname is null then raise exception 'A company name is required.'; end if;
+
+  if uname is null then
+    base := left(regexp_replace(split_part(new.email, '@', 1), '[^A-Za-z0-9._-]', '', 'g'), 36);
+    if char_length(base) < 3 then base := base || 'user'; end if;
+    uname := base;
+    while exists (select 1 from public.profiles where username = uname::extensions.citext) loop
+      n := n + 1; uname := base || n;
+    end loop;
+  end if;
 
   select id into comp_id from public.companies where email_domain = dom::extensions.citext;
   if comp_id is null then
-    insert into public.companies(name, email_domain) values (cname, dom) returning id into comp_id;
+    insert into public.companies(name, email_domain) values (coalesce(cname, initcap(split_part(dom, '.', 1))), dom) returning id into comp_id;
     is_new := true;
   end if;
 
