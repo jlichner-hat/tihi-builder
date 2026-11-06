@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ti:Hi Builder</title>
+<title>Ti:Hi Shipment Builder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
@@ -130,7 +130,7 @@ html,body{margin:0}
 <body>
 <!-- SIGN IN / SIGN UP -->
 <div id="authView" class="auth" hidden>
-  <div class="brand"><h1>Ti:Hi Builder</h1><p class="sub">Pallet and truck load planning</p></div>
+  <div class="brand"><h1>Ti:Hi Shipment Builder</h1><p class="sub">Pallet and truck load planning</p></div>
   <section class="panel">
     <div class="tabs" role="tablist">
       <button type="button" id="tabIn" aria-pressed="true">Sign in</button>
@@ -162,7 +162,7 @@ html,body{margin:0}
 
 <!-- WAITING FOR COMPANY APPROVAL -->
 <div id="pendingView" class="auth" hidden>
-  <div class="brand"><h1>Ti:Hi Builder</h1></div>
+  <div class="brand"><h1>Ti:Hi Shipment Builder</h1></div>
   <section class="panel">
     <h2>Almost there</h2>
     <p id="pendingText"></p>
@@ -176,8 +176,8 @@ html,body{margin:0}
 <section id="adminPanel" class="panel" hidden><div class="panel-head"><h2>Company approvals</h2><button type="button" id="adminClose">Close</button></div><div id="companyList"></div></section>
 <header>
   <div>
-    <h1>Ti:Hi Builder</h1>
-    <p class="sub">Enter your package sizes, pick pallets and a stack height, and get cases per layer (Ti), layers per pallet (Hi), a picture and spec sheet for every finished pallet, and a trailer floor plan.</p>
+    <h1>Ti:Hi Shipment Builder</h1>
+    <p class="sub">Enter your item sizes, pick pallets and a stack height, and get items per layer (Ti), layers per pallet (Hi), a picture and spec sheet for every finished pallet, and a trailer or container floor plan.</p>
   </div>
   <div class="hdr-actions"><button id="resetBtn" type="button">Load example data</button>
     <button id="pdfBtn" class="primary" type="button">Download PDF report</button></div>
@@ -188,11 +188,11 @@ html,body{margin:0}
   <!-- INPUTS -->
   <div class="col">
     <section class="panel" aria-labelledby="pkgH">
-      <div class="panel-head"><div><div class="step">Step 1</div><h2 id="pkgH">Packages</h2></div></div>
-      <label for="pkgCount">Number of different package sizes
+      <div class="panel-head"><div><div class="step">Step 1</div><h2 id="pkgH">Items</h2></div></div>
+      <label for="pkgCount">Number of different items
         <input id="pkgCount" type="number" min="1" max="20" step="1" value="3">
       </label>
-      <p class="hint">Dimensions in inches, weight in pounds per package. L × W is the footprint; H is the side that stays up.</p>
+      <p class="hint">Dimensions in inches, weight in pounds per item. L × W is the footprint; H is the side that stays up.</p>
       <datalist id="libNames"></datalist>
       <div id="libBox" class="lib">
         <div class="lib-row">
@@ -200,7 +200,7 @@ html,body{margin:0}
           <button id="libAdd" type="button" disabled>Add to list</button>
         </div>
         <details id="libManage"><summary>Manage saved items</summary><div id="libList" class="col"></div></details>
-        <p id="libMsg" class="hint" role="status">Click Save on any package to keep its size and weight for your company. Typing a saved name fills in the rest.</p>
+        <p id="libMsg" class="hint" role="status">Click Save on any item to keep its size and weight for your company. Typing a saved name fills in the rest.</p>
       </div>
       <div id="pkgList" class="col"></div>
     </section>
@@ -223,12 +223,21 @@ html,body{margin:0}
 
     <section class="panel" aria-labelledby="trkH">
       <div class="panel-head"><div><div class="step">Step 3</div><h2 id="trkH">Truck</h2></div></div>
-      <label for="truckPreset">Trailer type
+      <label for="truckPreset">Trailer or container type
         <select id="truckPreset">
-          <option value="53">53 ft dry van</option>
-          <option value="48">48 ft dry van</option>
-          <option value="28">28 ft pup trailer</option>
-          <option value="26">26 ft box truck</option>
+          <optgroup label="Trailers and trucks">
+            <option value="53">53 ft dry van</option>
+            <option value="48">48 ft dry van</option>
+            <option value="28">28 ft pup trailer</option>
+            <option value="26">26 ft box truck</option>
+          </optgroup>
+          <optgroup label="Shipping containers">
+            <option value="c20">20 ft standard container</option>
+            <option value="c40">40 ft standard container</option>
+            <option value="c40hc">40 ft high cube container</option>
+            <option value="c45hc">45 ft high cube container</option>
+            <option value="c53">53 ft domestic container</option>
+          </optgroup>
           <option value="custom">Custom</option>
         </select></label>
       <div class="row r4">
@@ -238,7 +247,7 @@ html,body{margin:0}
         <label for="tMax">Max lb<input id="tMax" type="number" step="100"></label>
       </div>
       <label class="check" for="dbl"><input id="dbl" type="checkbox"> Allow double-stacking pallets</label>
-      <p class="hint">Interior dimensions. A 53 ft van is about 630 × 98.5 × 108 in with a 45,000 lb payload; check your carrier's numbers.</p>
+      <p class="hint">Interior dimensions. A 53 ft van is about 630 × 98.5 × 108 in with a 45,000 lb payload. Container weights are the box's rated payload, and road weight limits are often lower. Check your carrier's numbers.</p>
     </section>
   </div>
 
@@ -254,7 +263,9 @@ html,body{margin:0}
 "use strict";
 const COLORS=["--c1","--c2","--c3","--c4","--c5","--c6","--c7","--c8"];
 const color=i=>`var(${COLORS[i%COLORS.length]})`;
-const TRUCKS={"53":{L:630,W:98.5,H:108,max:45000},"48":{L:570,W:98.5,H:108,max:45000},"28":{L:330,W:98,H:106,max:22500},"26":{L:312,W:96,H:96,max:10000}};
+const TRUCKS={"53":{L:630,W:98.5,H:108,max:45000},"48":{L:570,W:98.5,H:108,max:45000},"28":{L:330,W:98,H:106,max:22500},"26":{L:312,W:96,H:96,max:10000},
+  "c20":{L:232,W:92.5,H:94,max:62000},"c40":{L:473.5,W:92.5,H:94,max:58800},"c40hc":{L:473.5,W:92.5,H:106,max:58300},
+  "c45hc":{L:533.5,W:92.5,H:106,max:56400},"c53":{L:630,W:98.5,H:109,max:44000}};
 const LETTERS="ABCDEFGHIJKLMNOPQRST";
 
 const EXAMPLE={
@@ -263,7 +274,7 @@ const EXAMPLE={
     {name:"Case B",L:24,W:16,H:12,wt:40,qty:300,pallet:"auto"},
     {name:"Case C",L:12,W:10,H:8,wt:12,qty:500,pallet:"auto"}],
   pallets:[{id:"p0",name:"GMA 48 × 40",L:48,W:40,H:5.5,tare:45,max:2500,fixed:true}],
-  stackH:52,overhang:0,stackInclPallet:false,allowTip:false,mixPallet:"p0",
+  stackH:52,overhang:0,stackInclPallet:true,allowTip:false,mixPallet:"p0",
   truck:"53",tL:630,tW:98.5,tH:108,tMax:45000,dbl:false
 };
 let state=JSON.parse(JSON.stringify(EXAMPLE));
@@ -439,7 +450,7 @@ function renderPkgs(){
   $("pkgList").innerHTML=state.packages.map((p,i)=>`
    <div class="item" data-i="${i}">
      <div class="item-head"><span class="swatch" style="background:${color(i)}"></span>
-       <input id="pk-name-${i}" data-f="name" list="libNames" autocomplete="off" value="${esc(p.name)}" aria-label="Package ${i+1} name">
+       <input id="pk-name-${i}" data-f="name" list="libNames" autocomplete="off" value="${esc(p.name)}" aria-label="Item ${i+1} name">
        <button type="button" class="save" data-save="${i}"${LIBDB&&LIBW?"":" disabled"} title="Save this package's size and weight">Save</button></div>
      <div class="row r4">
        <label for="pk-L-${i}">L in<input id="pk-L-${i}" data-f="L" type="number" min="0" step="0.25" value="${p.L}"></label>
@@ -576,12 +587,12 @@ function renderResults(){
   h+=`<div class="tiles">
     <div class="tile hl"><span class="k">Pallets</span><span class="v">${R.built.length}</span><span class="s">${R.built.filter(b=>b.type==="full").length} full · ${R.built.filter(b=>b.type!=="full").length} mixed/partial</span></div>
     <div class="tile hl"><span class="k">Trucks</span><span class="v">${TL.trucks.filter(t=>t.units.length).length||0}</span><span class="s">${positions} floor spots used</span></div>
-    <div class="tile"><span class="k">Packages</span><span class="v">${fmt(totalCases)}</span><span class="s">${state.packages.length} sizes</span></div>
+    <div class="tile"><span class="k">Items</span><span class="v">${fmt(totalCases)}</span><span class="s">${state.packages.length} sizes</span></div>
     <div class="tile"><span class="k">Gross weight</span><span class="v">${fmt(totalWt)}</span><span class="s">lb incl. pallets</span></div>
   </div>`;
 
   // Ti x Hi cards
-  h+=`<section class="panel"><div class="panel-head"><h2>Ti × Hi by package</h2><span class="hint">Ti = packages per layer · Hi = layers</span></div><div class="cards">`;
+  h+=`<section class="panel"><div class="panel-head"><h2>Ti × Hi by item</h2><span class="hint">Ti = items per layer · Hi = layers</span></div><div class="cards">`;
   for(const r of R.skus){
     const s=r.sku,res=r.res;
     if(!res){h+=`<div class="card"><div class="item-head"><span class="swatch" style="background:${color(s.idx)}"></span><h3>${esc(s.name)}</h3></div><p class="hint">Doesn't fit. Check dimensions, stack height and pallet weight limit.</p></div>`;continue}
@@ -624,7 +635,7 @@ function renderResults(){
         <dt>Gross weight</dt><dd><b>${fmt(b.weight)} lb</b></dd>
         <dt>Product weight</dt><dd>${fmt(net)} lb</dd>
         <dt>Pallet (${esc(b.pallet.name)})</dt><dd>${fmt(b.pallet.tare)} lb</dd>
-        <dt>Packages · layers</dt><dd>${b.cases} · ${b.layers.length}</dd>
+        <dt>Items · layers</dt><dd>${b.cases} · ${b.layers.length}</dd>
         <dt>Cube</dt><dd>${fmt(cube,1)} ft³</dd>
         ${n>1?`<dt>All ${n} pallets</dt><dd>${fmt(b.weight*n)} lb</dd>`:""}
         <dt>Loaded on</dt><dd>${tr||"–"}</dd>
@@ -703,12 +714,12 @@ async function buildPdf(){
   const date=new Date().toLocaleString();
   // Title block
   doc.setFillColor(29,35,43);doc.rect(0,0,PW,64,"F");doc.setFillColor(242,183,5);doc.rect(0,64,PW,5,"F");
-  doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(22);doc.text("Ti:Hi Builder",M,38);
+  doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(22);doc.text("Ti:Hi Shipment Builder",M,38);
   doc.setFont("helvetica","normal");doc.setFontSize(10);doc.text("Load report  \u00b7  "+date,M+CW,38,{align:"right"});
   y=92;
   const totalCases=R.built.reduce((a,b)=>a+b.cases,0),totalWt=R.built.reduce((a,b)=>a+b.weight,0);
   const nTrucks=TL.trucks.filter(t=>t.units.length).length;
-  const tiles=[["Pallets",R.built.length],["Trucks",nTrucks],["Packages",fmt(totalCases)],["Gross weight",fmt(totalWt)+" lb"]];
+  const tiles=[["Pallets",R.built.length],["Trucks",nTrucks],["Items",fmt(totalCases)],["Gross weight",fmt(totalWt)+" lb"]];
   const tw=(CW-30)/4;
   tiles.forEach(([k,v],i)=>{const x=M+i*(tw+10);doc.setDrawColor(211,216,222);doc.setLineWidth(.8);doc.rect(x,y,tw,46);
     doc.setFillColor(242,183,5);doc.rect(x,y+43,tw,3,"F");
@@ -716,12 +727,12 @@ async function buildPdf(){
     doc.setFont("helvetica","bold");doc.setFontSize(17);doc.setTextColor(...ink);doc.text(String(v),x+8,y+34)});
   y+=62;
   doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...muted);
-  const settings=`Max stack height ${state.stackH} in ${state.stackInclPallet?"(includes pallet)":"(product only, pallet added)"}  \u00b7  Overhang ${state.overhang} in/side  \u00b7  ${state.allowTip?"Packages may lie on side":"Packages kept upright"}  \u00b7  Truck ${fmt(state.tL/12,1)} ft x ${state.tW} x ${state.tH} in, max ${fmt(state.tMax)} lb  \u00b7  ${state.dbl?"Double-stacking allowed":"Single-stacked"}`;
+  const settings=`Max stack height ${state.stackH} in ${state.stackInclPallet?"(includes pallet)":"(product only, pallet added)"}  \u00b7  Overhang ${state.overhang} in/side  \u00b7  ${state.allowTip?"Items may lie on side":"Items kept upright"}  \u00b7  Truck ${fmt(state.tL/12,1)} ft x ${state.tW} x ${state.tH} in, max ${fmt(state.tMax)} lb  \u00b7  ${state.dbl?"Double-stacking allowed":"Single-stacked"}`;
   const lines=doc.splitTextToSize(settings,CW);doc.text(lines,M,y);y+=lines.length*11+8;
-  heading("Packages and Ti x Hi");
+  heading("Items and Ti x Hi");
   doc.autoTable({startY:y,margin:{left:M,right:M},theme:"grid",styles:{fontSize:8.5,cellPadding:4,textColor:ink,lineColor:[211,216,222]},
     headStyles:{fillColor:[29,35,43],textColor:255,fontStyle:"bold"},
-    head:[["Package","L x W x H in","Wt lb","Qty","Pallet","Ti","Hi","Per pallet","Full","Left over"]],
+    head:[["Item","L x W x H in","Wt lb","Qty","Pallet","Ti","Hi","Per pallet","Full","Left over"]],
     body:R.skus.map(r=>{const s=r.sku,x=r.res;return [s.name,`${s.L} x ${s.W} x ${s.H}`,fmt(s.wt,1),fmt(s.qty),x?x.pallet.name:"-",x?x.ti:"-",x?x.hi:"-",x?x.cases:"-",r.full,fmt(r.rem)]}),
     columnStyles:{2:{halign:"right"},3:{halign:"right"},5:{halign:"right"},6:{halign:"right"},7:{halign:"right"},8:{halign:"right"},9:{halign:"right"}}});
   y=doc.lastAutoTable.finalY+16;
@@ -757,7 +768,7 @@ async function buildPdf(){
       const counts=new Map();b.layers.forEach(l=>counts.set(l.sku.idx,(counts.get(l.sku.idx)||0)+l.cases));
       const tr=[...new Set(g.list.map(p=>{let t0=0;TL.trucks.forEach((t,ti)=>t.units.forEach(u=>u.u.items.forEach(q=>{if(q.id===p.id)t0=ti+1})));return t0}).filter(Boolean))].map(t=>"Truck "+t).join(", ");
       const pairs=[["Gross weight",fmt(b.weight)+" lb"],["Product / pallet",`${fmt(b.weight-b.pallet.tare)} / ${fmt(b.pallet.tare)} lb`],
-        ["Packages / layers",`${b.cases} / ${b.layers.length}`],["Cube",fmt(d.L*d.W*d.H/1728,1)+" cu ft"],
+        ["Items / layers",`${b.cases} / ${b.layers.length}`],["Cube",fmt(d.L*d.W*d.H/1728,1)+" cu ft"],
         ["Contents",[...counts].map(([k,c])=>`${state.packages[k].name} x ${c}`).join(", ")],["Loaded on",tr||"-"]];
       if(n>1)pairs.splice(1,0,[`All ${n} pallets`,fmt(b.weight*n)+" lb"]);
       kv(x+8,yy+16,fw-16,pairs)});
@@ -785,7 +796,7 @@ async function buildPdf(){
     columnStyles:{1:{halign:"right"},5:{halign:"right"},6:{halign:"right"},7:{halign:"right"}}});
   const pages=doc.getNumberOfPages();
   for(let p=1;p<=pages;p++){doc.setPage(p);doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...muted);
-    doc.text(`Ti:Hi Builder  \u00b7  ${date}`,M,PH-20);doc.text(`Page ${p} of ${pages}`,PW-M,PH-20,{align:"right"})}
+    doc.text(`Ti:Hi Shipment Builder  \u00b7  ${date}`,M,PH-20);doc.text(`Page ${p} of ${pages}`,PW-M,PH-20,{align:"right"})}
   return doc.output("blob");
 }
 window.__tihi_pdf=buildPdf;
@@ -890,7 +901,7 @@ async function route(){
     const c=prof.companies||{};
     if(c.status!=="approved"&&!IS_ADMIN){
       $("pendingText").textContent=c.status==="rejected"
-        ?`${c.name} (${c.email_domain}) wasn't approved for Ti:Hi Builder. Contact the site admin if you think this is a mistake.`
+        ?`${c.name} (${c.email_domain}) wasn't approved for Ti:Hi Shipment Builder. Contact the site admin if you think this is a mistake.`
         :`Your email is verified. ${c.name} (${c.email_domain}) is waiting for approval. You can use the app as soon as it's approved.`;
       show("pending");return}
     $("acctUser").textContent=prof.username;$("acctCompany").textContent=c.name+(c.status!=="approved"?" (not yet approved)":"");
@@ -944,7 +955,7 @@ if(!sb){
     const {error}=await sb.auth.signUp({email,password:pw,options:{emailRedirectTo:location.origin+location.pathname,data:{username,company}}});
     if(error)return authMsg("Couldn't create the account: "+error.message,"err");
     $("signUpForm").reset();
-    authMsg(`Check ${email} for a verification link. After you click it, sign in here. If @${dom} is new to Ti:Hi Builder, the company is reviewed before you can start.`,"ok");
+    authMsg(`Check ${email} for a verification link. After you click it, sign in here. If @${dom} is new to Ti:Hi Shipment Builder, the company is reviewed before you can start.`,"ok");
   });
   $("resetForm").addEventListener("submit",async e=>{e.preventDefault();
     const pw=$("newPass").value;if(pw.length<8)return authMsg("Passwords need at least 8 characters.","err");

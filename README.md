@@ -1,4 +1,4 @@
-# Ti:Hi Builder
+# Ti:Hi Shipment Builder
 
 Pallet and truck load planner with company accounts. It's a static site (`index.html`) that uses Supabase for sign-up, email verification, and each company's private item library.
 
