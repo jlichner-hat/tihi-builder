@@ -335,7 +335,7 @@ function layerPattern(PL,PW,l,w){
 
 function usableHeight(p){return state.stackInclPallet?Math.max(0,state.stackH-p.H):state.stackH}
 
-/* Best Ti x Hi for one package on one pallet, respecting weight limit */
+/* Best Ti:Hi for one item on one pallet, respecting weight limit */
 function tiHi(pkg,p){
   const oh=state.overhang*2, L=p.L+oh, W=p.W+oh, avail=usableHeight(p);
   const dims=[pkg.L,pkg.W,pkg.H];
@@ -606,8 +606,8 @@ function renderResults(){
     <div class="tile"><span class="k">Gross weight</span><span class="v">${fmt(totalWt)}</span><span class="s">lb incl. pallets</span></div>
   </div>`;
 
-  // Ti x Hi cards
-  h+=`<section class="panel"><div class="panel-head"><h2>Ti × Hi by item</h2><span class="hint">Ti = items per layer · Hi = layers</span></div><div class="cards">`;
+  // Ti:Hi cards
+  h+=`<section class="panel"><div class="panel-head"><h2>Ti:Hi by item</h2><span class="hint">Ti = items per layer · Hi = layers</span></div><div class="cards">`;
   for(const r of R.skus){
     const s=r.sku,res=r.res;
     if(!res){h+=`<div class="card"><div class="item-head"><span class="swatch" style="background:${color(s.idx)}"></span><h3>${esc(s.name)}</h3></div><p class="hint">Doesn't fit. Check dimensions, stack height and pallet weight limit.</p></div>`;continue}
@@ -615,7 +615,7 @@ function renderResults(){
     const eff=(res.ti*res.l*res.w)/(res.pallet.L*res.pallet.W)*100;
     h+=`<div class="card">
       <div class="item-head"><span class="swatch" style="background:${color(s.idx)}"></span><h3>${esc(s.name)}</h3><span class="pill" style="margin-left:auto">${esc(res.pallet.name)}</span></div>
-      <div class="tihi">${res.ti} × ${res.hi}<small>= ${res.cases} PER PALLET</small></div>
+      <div class="tihi">${res.ti}:${res.hi}<small>= ${res.cases} PER PALLET</small></div>
       <div class="figs"><figure>${layerSVG(res,s.idx)}<figcaption>Layer, top view</figcaption></figure>
         <figure>${sideSVG(fullP,maxH)}<figcaption>Side view · red = max height</figcaption></figure></div>
       <dl class="kv">
@@ -744,7 +744,7 @@ async function buildPdf(){
   doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...muted);
   const settings=`Max stack height ${state.stackH} in ${state.stackInclPallet?"(includes pallet)":"(product only, pallet added)"}  \u00b7  Overhang ${state.overhang} in/side  \u00b7  ${state.allowTip?"Items may lie on side":"Items kept upright"}  \u00b7  Truck ${fmt(state.tL/12,1)} ft x ${state.tW} x ${state.tH} in, max ${fmt(state.tMax)} lb  \u00b7  ${state.dbl?"Double-stacking allowed":"Single-stacked"}`;
   const lines=doc.splitTextToSize(settings,CW);doc.text(lines,M,y);y+=lines.length*11+8;
-  heading("Items and Ti x Hi");
+  heading("Items and Ti:Hi");
   doc.autoTable({startY:y,margin:{left:M,right:M},theme:"grid",styles:{fontSize:8.5,cellPadding:4,textColor:ink,lineColor:[211,216,222]},
     headStyles:{fillColor:[29,35,43],textColor:255,fontStyle:"bold"},
     head:[["Item","L x W x H in","Wt lb","Qty","Pallet","Ti","Hi","Per pallet","Full","Left over"]],
@@ -761,7 +761,7 @@ async function buildPdf(){
     row.forEach((r,j)=>{const x=M+j*(lw+16);const c=hex(color(r.sku.idx));
       doc.setFillColor(...c);doc.rect(x,y,8,8,"F");doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(...ink);doc.text(r.sku.name,x+12,y+7.5);
       doc.addImage(imgs[j].data,"PNG",x,y+14,lw,lw*imgs[j].ratio);
-      const yy=y+20+ih;doc.setFontSize(12);doc.text(`${r.res.ti} x ${r.res.hi} = ${r.res.cases}`,x,yy+6);
+      const yy=y+20+ih;doc.setFontSize(12);doc.text(`${r.res.ti}:${r.res.hi} = ${r.res.cases}`,x,yy+6);
       kv(x,yy+20,lw,[["Placed as",`${r.res.l}x${r.res.w}, ${r.res.h} up`],["Limited by",r.res.limitedBy]])});
     y+=ih+70;
   }
