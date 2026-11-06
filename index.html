@@ -11,7 +11,7 @@
 :root{
   --bg:#eef0f2; --panel:#ffffff; --ink:#1d232b; --muted:#5b6672; --line:#d3d8de; --soft:#e4e8ec;
   --accent:#f2b705; --accent-ink:#1d232b; --warn:#b4401f; --ok:#2f7d4f;
-  --pallet:#9a7b52; --truck:#c9cfd6; --truck-floor:#f7f8f9;
+  --pallet:#9a7b52; --truck:#c9cfd6; --truck-floor:#f7f8f9; --logo-filter:none;
   --c1:#c98a4b; --c2:#4f7fb0; --c3:#6f9a54; --c4:#a35d8f; --c5:#c4a23a; --c6:#4b9a99; --c7:#b4573d; --c8:#7a6fb0;
   --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
   --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -20,11 +20,11 @@
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#14181d; --panel:#1c2229; --ink:#e6eaee; --muted:#9aa5b1; --line:#323b45; --soft:#252d36;
   --accent:#f2b705; --accent-ink:#14181d; --warn:#e2774f; --ok:#5cbf83;
-  --pallet:#8a6c45; --truck:#4a5562; --truck-floor:#20272f; color-scheme:dark}}
+  --pallet:#8a6c45; --truck:#4a5562; --truck-floor:#20272f; --logo-filter:invert(1) brightness(1.15); color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#14181d; --panel:#1c2229; --ink:#e6eaee; --muted:#9aa5b1; --line:#323b45; --soft:#252d36;
   --accent:#f2b705; --accent-ink:#14181d; --warn:#e2774f; --ok:#5cbf83;
-  --pallet:#8a6c45; --truck:#4a5562; --truck-floor:#20272f; color-scheme:dark}
+  --pallet:#8a6c45; --truck:#4a5562; --truck-floor:#20272f; --logo-filter:invert(1) brightness(1.15); color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
@@ -110,6 +110,9 @@ button:disabled{opacity:.5;cursor:default}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 
 [hidden]{display:none!important}
+.logo-bar{display:flex;justify-content:center;padding-top:4px}
+.logo{height:64px;width:auto;max-width:100%;filter:var(--logo-filter)}
+.acct{justify-content:flex-end}
 html,body{margin:0}
 .auth{max-width:440px;margin:6vh auto 0;display:flex;flex-direction:column;gap:16px}
 .auth .brand{border-bottom:3px solid var(--ink);padding-bottom:8px;position:relative}
@@ -130,6 +133,7 @@ html,body{margin:0}
 <body>
 <!-- SIGN IN / SIGN UP -->
 <div id="authView" class="auth" hidden>
+  <div class="logo-bar"><img src="assets/hat-logo.png" alt="HAT Human Active Technology" class="logo" width="640" height="313"></div>
   <div class="brand"><h1>Ti:Hi Shipment Builder</h1><p class="sub">Pallet and truck load planning</p></div>
   <section class="panel">
     <div class="tabs" role="tablist">
@@ -162,6 +166,7 @@ html,body{margin:0}
 
 <!-- WAITING FOR COMPANY APPROVAL -->
 <div id="pendingView" class="auth" hidden>
+  <div class="logo-bar"><img src="assets/hat-logo.png" alt="HAT Human Active Technology" class="logo" width="640" height="313"></div>
   <div class="brand"><h1>Ti:Hi Shipment Builder</h1></div>
   <section class="panel">
     <h2>Almost there</h2>
@@ -172,6 +177,7 @@ html,body{margin:0}
 
 
 <div class="wrap" id="appView" hidden>
+<div class="logo-bar"><img src="assets/hat-logo.png" alt="HAT Human Active Technology" class="logo" width="640" height="313"></div>
 <div class="acct"><span>Signed in as <b id="acctUser"></b> · <b id="acctCompany"></b></span><button type="button" id="adminBtn" hidden>Approve companies</button><button type="button" id="signOutBtn">Sign out</button></div>
 <section id="adminPanel" class="panel" hidden><div class="panel-head"><h2>Company approvals</h2><button type="button" id="adminClose">Close</button></div><div id="companyList"></div></section>
 <header>
