@@ -100,7 +100,7 @@ td.n{font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-num
 button.save{padding:3px 10px;font-size:.78rem;margin-left:auto;flex:none}
 button:disabled{opacity:.5;cursor:default}
 .hdr-actions{display:flex;gap:8px;flex-wrap:wrap}
-#pdfMsg{width:100%;text-align:right}
+#pdfMsg,#cmpPdfMsg{width:100%;text-align:right}
 .iso{margin:0;padding:8px;background:var(--bg);border-radius:4px;display:flex;justify-content:center}
 .iso svg{max-height:240px;width:100%}
 .dims{font-size:1rem;font-weight:500;text-align:center}
@@ -296,7 +296,9 @@ th.opt{text-align:right}
     <h1>Compare box sizes</h1>
     <p class="sub">Enter two or more box sizes for the same item and see which one puts more product on a single pallet. This page looks at one pallet only, not truck loading.</p>
   </div>
-  <div class="hdr-actions"><button id="cmpExample" type="button">Load example</button></div>
+  <div class="hdr-actions"><button id="cmpExample" type="button">Load example</button>
+    <button id="cmpPdfBtn" class="primary" type="button">Download PDF report</button></div>
+  <p id="cmpPdfMsg" class="hint" role="status" hidden></p>
 </header>
 <div class="grid">
   <div class="col">
@@ -1284,6 +1286,124 @@ $("cmpIncl").addEventListener("change",e=>{cmp.stackInclPallet=e.target.checked;
 $("cmpTip").addEventListener("change",e=>{cmp.allowTip=e.target.checked;cmpRerender()});
 $("cmpShip").addEventListener("input",e=>{cmp.ship=num(e.target.value);cmpRerender()});
 $("cmpExample").addEventListener("click",()=>{cmp=JSON.parse(JSON.stringify(CMP_EX));cmpRenderInputs();cmpRerender()});
+
+
+/* ---------- COMPARE PDF REPORT ---------- */
+async function buildCmpPdf(){
+  const C=cmpCalc(), ok=C.ranked; const {jsPDF}=window.jspdf;
+  if(!ok.length) throw new Error("No box fits on the pallet yet, so there's nothing to report.");
+  const unitWord=cmp.boxes.every(b=>Math.max(1,Math.floor(num(b.units,1)))===1)?"boxes":"units";
+  const item=cmp.item.trim();
+  const doc=new jsPDF({unit:"pt",format:"letter"}); const PW=612,PH=792,M=40,CW=PW-2*M;
+  let y=M; const ink=[29,35,43],muted=[91,102,114];
+  const need=h=>{if(y+h>PH-M){doc.addPage();y=M}};
+  const heading=(t,next=0)=>{need(40+next);y+=6;doc.setFont("helvetica","bold");doc.setFontSize(13);doc.setTextColor(...ink);doc.text(t.toUpperCase(),M,y+12);
+    doc.setDrawColor(242,183,5);doc.setLineWidth(2);doc.line(M,y+18,M+CW,y+18);y+=30};
+  const kv=(x,yy,w,pairs)=>{doc.setFontSize(8.5);pairs.forEach(([k,v],i)=>{doc.setFont("helvetica","normal");doc.setTextColor(...muted);doc.text(k,x,yy+i*12);
+    doc.setTextColor(...ink);doc.setFont("courier","normal");doc.text(String(v),x+w,yy+i*12,{align:"right"})});return pairs.length*12};
+  const date=new Date().toLocaleString();
+  doc.setFillColor(29,35,43);doc.rect(0,0,PW,64,"F");doc.setFillColor(242,183,5);doc.rect(0,64,PW,5,"F");
+  doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(22);doc.text("Box Size Comparison",M,38);
+  doc.setFont("helvetica","normal");doc.setFontSize(10);doc.text("Ti:Hi Shipment Builder  ·  "+date,M+CW,38,{align:"right"});
+  y=92;
+  const best=ok[0];
+  const tiles=[["Item",item||"-"],["Box sizes",String(C.rows.length)],["Best box",best.b.name],[`Best ${unitWord} / pallet`,fmt(best.unitsPP)]];
+  const tw=(CW-30)/4;
+  tiles.forEach(([k,v],i)=>{const x=M+i*(tw+10);doc.setDrawColor(211,216,222);doc.setLineWidth(.8);doc.rect(x,y,tw,46);
+    doc.setFillColor(242,183,5);doc.rect(x,y+43,tw,3,"F");
+    doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...muted);doc.text(k.toUpperCase(),x+8,y+13);
+    doc.setFont("helvetica","bold");let fs=17;doc.setFontSize(fs);while(fs>9&&doc.getTextWidth(String(v))>tw-16){fs--;doc.setFontSize(fs)}
+    doc.setTextColor(...ink);doc.text(doc.splitTextToSize(String(v),tw-16)[0],x+8,y+34)});
+  y+=62;
+  const vEl=$("cmpResults").querySelector(".verdict");
+  if(vEl){doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...ink);const vl=doc.splitTextToSize(vEl.textContent.trim(),CW);doc.text(vl,M,y);y+=vl.length*14+4}
+  doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...muted);
+  const settings=`Pallet ${C.p.name}: ${cmp.pal.L} x ${cmp.pal.W} in, ${cmp.pal.H} in tall, ${fmt(cmp.pal.tare)} lb, max load ${fmt(cmp.pal.max)} lb  ·  Max stack height ${cmp.stackH} in ${cmp.stackInclPallet?"(includes pallet)":"(product only, pallet added)"}  ·  Overhang ${cmp.overhang} in/side  ·  ${cmp.allowTip?"Boxes may lie on side":"Boxes kept upright"}${C.ship?`  ·  Units to ship ${fmt(C.ship)}`:""}`;
+  const lines=doc.splitTextToSize(settings,CW);doc.text(lines,M,y);y+=lines.length*11+8;
+  // Side-by-side table, best value in each row highlighted
+  heading("Side by side");
+  const cols=C.rows;
+  const rows=[
+    ["Box size L x W x H in",x=>`${x.b.L} x ${x.b.W} x ${x.b.H}`],
+    ["Units per box",x=>fmt(x.units)],
+    ["Ti (boxes per layer)",x=>x.r.ti],
+    ["Hi (layers)",x=>x.r.hi+(x.boxes>x.r.ti*x.r.hi?" + partial":"")],
+    ["Boxes per pallet",x=>fmt(x.boxes)],
+    [unitWord==="boxes"?"Units per pallet":`Units${item?" ("+item+")":""} per pallet`,x=>fmt(x.unitsPP),"unitsPP",1],
+    ["Layer coverage",x=>fmt(x.coverage,1)+"%","coverage",1],
+    ["Cube utilization",x=>fmt(x.cube,1)+"%","cube",1],
+    ["Pallet height in",x=>fmt(x.height,1)],
+    ["Unused height in",x=>fmt(x.unused,1),"unused",-1],
+    ["Footprint L x W in",x=>`${fmt(x.dims.L,1)} x ${fmt(x.dims.W,1)}`],
+    ["Product weight lb",x=>fmt(x.net)],
+    ["Gross weight lb",x=>fmt(x.gross)],
+    ["Limited by",x=>x.r.limitedBy],
+    ["Rank",x=>"#"+x.rank]];
+  if(C.ship) rows.push([`Pallets for ${fmt(C.ship)}`,x=>fmt(x.pallets),"pallets",-1]);
+  const bestCells=new Set();
+  rows.forEach(([,,key,dir],ri)=>{if(!key)return;const v=ok.map(x=>x[key]);const t=dir>0?Math.max(...v):Math.min(...v);
+    if(Math.max(...v)-Math.min(...v)<1e-9)return;cols.forEach((x,ci)=>{if(!x.err&&Math.abs(x[key]-t)<1e-9)bestCells.add(ri+"|"+(ci+1))})});
+  const colW=Math.min(110,(CW-140)/cols.length);
+  doc.autoTable({startY:y,margin:{left:M,right:M},theme:"grid",styles:{fontSize:8.5,cellPadding:4,textColor:ink,lineColor:[211,216,222]},
+    headStyles:{fillColor:[29,35,43],textColor:255,fontStyle:"bold",halign:"right"},
+    head:[["",...cols.map(x=>x.b.name)]],
+    body:rows.map(([label,fn])=>[label,...cols.map(x=>x.err?"-":String(fn(x)))]),
+    columnStyles:Object.fromEntries(cols.map((x,i)=>[i+1,{halign:"right",cellWidth:colW}])),
+    didParseCell:d=>{if(d.section==="head"&&d.column.index===0)d.cell.styles.halign="left";
+      if(d.section==="body"&&bestCells.has(d.row.index+"|"+d.column.index)){d.cell.styles.fillColor=[253,240,196];d.cell.styles.fontStyle="bold"}},
+    didDrawCell:d=>{if(d.section==="head"&&d.column.index>0){const c=hex(color(cols[d.column.index-1].i));doc.setFillColor(...c);doc.rect(d.cell.x+3,d.cell.y+d.cell.height/2-3,6,6,"F")}}});
+  y=doc.lastAutoTable.finalY+8;
+  doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...muted);
+  const note=doc.splitTextToSize("Highlighted = best in that row. Layer coverage is how much of the pallet deck one layer covers. Cube utilization is box volume on the pallet divided by pallet deck area x usable height.",CW);
+  doc.text(note,M,y+8);y+=note.length*10+14;
+  const errs=cols.filter(x=>x.err);
+  if(errs.length){doc.setTextColor(180,64,31);errs.forEach(x=>{need(14);doc.text(`${x.b.name}: ${x.err}`,M,y);y+=12});y+=6}
+  // One block per box: 3D pallet + layer pattern + key figures, 2 per row
+  heading("Pallet for each box",300);
+  const list=[...ok].sort((a,b)=>a.rank-b.rank), fw=(CW-20)/2;
+  for(let i=0;i<list.length;i+=2){
+    const row=list.slice(i,i+2);
+    const isos=await Promise.all(row.map(x=>svgToPng(isoSVG(x.build,cmp,x.b.name+" pallet"),700)));
+    const lays=await Promise.all(row.map(x=>svgToPng(layerSVG(x.r,x.i),500)));
+    const ih=150,lh=90,bh=ih+lh+150;need(bh+12);
+    row.forEach((x,j)=>{const X=M+j*(fw+20),c=hex(color(x.i));
+      doc.setDrawColor(x.rank===1&&ok.length>1?242:211,x.rank===1&&ok.length>1?183:216,x.rank===1&&ok.length>1?5:222);doc.setLineWidth(x.rank===1&&ok.length>1?1.6:.8);doc.rect(X,y,fw,bh);
+      doc.setFillColor(...c);doc.rect(X+8,y+8,9,9,"F");
+      doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(...ink);doc.text(doc.splitTextToSize(x.b.name,fw-90)[0],X+22,y+16);
+      doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...muted);doc.text(x.rank===1&&ok.length>1?"BEST":"#"+x.rank,X+fw-8,y+16,{align:"right"});
+      doc.setFont("helvetica","bold");doc.setFontSize(18);doc.setTextColor(...ink);doc.text(`${x.r.ti}:${x.r.hi}`,X+8,y+40);const tiw=doc.getTextWidth(`${x.r.ti}:${x.r.hi}`);
+      doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...muted);doc.text(`= ${fmt(x.boxes)} boxes · ${fmt(x.unitsPP)} ${unitWord}`,X+14+tiw,y+40);
+      let m=isos[j],iw=fw-16,h2=iw*m.ratio;if(h2>ih){h2=ih;iw=ih/m.ratio}
+      doc.addImage(m.data,"PNG",X+(fw-iw)/2,y+48,iw,h2);
+      m=lays[j];let lw2=fw-16,lh2=lw2*m.ratio;if(lh2>lh){lh2=lh;lw2=lh/m.ratio}
+      doc.addImage(m.data,"PNG",X+(fw-lw2)/2,y+52+ih,lw2,lh2);
+      doc.setFontSize(7);doc.text("LAYER, TOP VIEW",X+fw/2,y+62+ih+lh,{align:"center"});
+      kv(X+8,y+80+ih+lh,fw-16,[["Placed as",`${x.r.l} x ${x.r.w}, ${x.r.h} in up`],["Finished size",`${fmt(x.dims.L,1)} x ${fmt(x.dims.W,1)} x ${fmt(x.height,1)} in`],
+        ["Cube utilization",fmt(x.cube,1)+"%"],["Gross weight",fmt(x.gross)+" lb"],["Limited by",x.r.limitedBy],...(C.ship?[[`Pallets for ${fmt(C.ship)}`,fmt(x.pallets)]]:[])]);
+    });
+    y+=bh+12;
+  }
+  const pages=doc.getNumberOfPages();
+  for(let p=1;p<=pages;p++){doc.setPage(p);doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...muted);
+    doc.text(`Box Size Comparison  ·  ${date}`,M,PH-20);doc.text(`Page ${p} of ${pages}`,PW-M,PH-20,{align:"right"})}
+  return doc.output("blob");
+}
+window.__tihi_cmp_pdf=buildCmpPdf;
+$("cmpPdfBtn").addEventListener("click",async()=>{
+  const btn=$("cmpPdfBtn"),msg=$("cmpPdfMsg");const say=t=>{msg.textContent=t;msg.hidden=!t};
+  if(!window.jspdf){say("The PDF tools didn't load. Reload the page and try again.");return}
+  btn.disabled=true;btn.textContent="Building PDF...";say("");
+  try{
+    const blob=await buildCmpPdf();
+    const stamp=new Date().toISOString().slice(0,10);
+    const name=slug(cmp.item.trim()||"box-size");
+    const url=URL.createObjectURL(blob),a=document.createElement("a");
+    a.href=url;a.download=`TiHi-${name}-comparison-${stamp}.pdf`;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+    say("PDF downloaded.");
+  }catch(e){say("Couldn't make the PDF: "+((e&&e.message)||e))}
+  finally{btn.disabled=false;btn.textContent="Download PDF report"}
+});
 
 /* ---------- PAGES ---------- */
 function showPage(pg){

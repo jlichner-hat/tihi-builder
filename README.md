@@ -25,6 +25,6 @@ Pallet and truck load planner with company accounts. It's a static site (`index.
    If you want to use a personal address for the admin account, first run `delete from public.blocked_domains where domain = 'gmail.com';` and sign up, then add it back.
 
 ## Files
-- `index.html`: the app (planner, box size comparison, sign-in, sign-up, approvals). The **Compare box sizes** page (`index.html#compare`) puts two or more box sizes for the same item on one pallet and ranks them by units per pallet and cube utilization.
+- `index.html`: the app (planner, box size comparison, sign-in, sign-up, approvals). The **Compare box sizes** page (`index.html#compare`) puts two or more box sizes for the same item on one pallet and ranks them by units per pallet and cube utilization. Its **Download PDF report** button saves the comparison as a PDF.
 - `config.js`: Supabase URL and anon key
 - `supabase/schema.sql`: tables, sign-up trigger, and access rules
