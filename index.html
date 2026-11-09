@@ -126,6 +126,19 @@ html,body{margin:0}
 .linkbtn{background:none;border:none;color:var(--muted);text-decoration:underline;padding:0;font-weight:400;cursor:pointer}
 .company-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
 .company-row .acts{display:flex;gap:6px}
+.pagenav{border-bottom:1px solid var(--line);padding-bottom:12px}
+.pagenav button{font-family:var(--f-display);font-size:1.05rem;letter-spacing:.04em;text-transform:uppercase;padding:6px 16px}
+.verdict{font-size:1.05rem;margin:0}
+.verdict b{font-family:var(--f-display);font-size:1.25rem;letter-spacing:.02em}
+.cmpbars{display:flex;flex-direction:column;gap:8px}
+.cmpbar{display:grid;grid-template-columns:minmax(0,9rem) minmax(0,1fr) auto;gap:10px;align-items:center;font-size:.85rem}
+.cmpbar .nm{display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmpbar .bar{height:16px;border-radius:3px}
+.cmpbar .val{font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right;min-width:6.5rem}
+td.best{font-weight:600;box-shadow:inset 0 -3px 0 var(--accent)}
+th.opt{text-align:right}
+.card.win{border-color:var(--accent);box-shadow:inset 0 4px 0 var(--accent)}
+@media (max-width:520px){.cmpbar{grid-template-columns:minmax(0,1fr) auto}.cmpbar .bar{grid-column:1/-1;grid-row:2}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
@@ -189,6 +202,11 @@ html,body{margin:0}
     <div class="tablewrap"><table><thead><tr><th>Username</th><th>Email</th><th>Company</th><th>Role</th><th>Joined</th></tr></thead><tbody id="userRows"></tbody></table></div>
   </div>
 </section>
+<nav class="tabs pagenav" aria-label="Pages">
+  <button type="button" data-page="builder" aria-pressed="true">Shipment builder</button>
+  <button type="button" data-page="compare" aria-pressed="false">Compare box sizes</button>
+</nav>
+<div id="builderPage" class="col" style="gap:20px">
 <header>
   <div>
     <h1>Ti:Hi Shipment Builder</h1>
@@ -271,6 +289,49 @@ html,body{margin:0}
 </div>
 </div>
 
+<!-- COMPARE BOX SIZES -->
+<div id="comparePage" class="col" style="gap:20px" hidden>
+<header>
+  <div>
+    <h1>Compare box sizes</h1>
+    <p class="sub">Enter two or more box sizes for the same item and see which one puts more product on a single pallet. This page looks at one pallet only, not truck loading.</p>
+  </div>
+  <div class="hdr-actions"><button id="cmpExample" type="button">Load example</button></div>
+</header>
+<div class="grid">
+  <div class="col">
+    <section class="panel" aria-labelledby="cmpBoxH">
+      <div class="panel-head"><div><div class="step">Step 1</div><h2 id="cmpBoxH">Box sizes</h2></div>
+        <button id="cmpAdd" type="button">+ Add box size</button></div>
+      <label for="cmpItem">Item being packed<input id="cmpItem" autocomplete="off" placeholder="e.g. 12 oz jar"></label>
+      <p class="hint">Dimensions in inches and weight in pounds for one full box. Units per box is how many of the item each box holds, so boxes of different sizes are compared on product per pallet. Leave it at 1 to compare boxes.</p>
+      <div id="cmpList" class="col"></div>
+    </section>
+    <section class="panel" aria-labelledby="cmpPalH">
+      <div class="panel-head"><div><div class="step">Step 2</div><h2 id="cmpPalH">Pallet</h2></div></div>
+      <label for="cmpPreset">Pallet type
+        <select id="cmpPreset"></select></label>
+      <div class="row r3">
+        <label for="cmpPL">Length in<input id="cmpPL" data-k="L" type="number" min="0" step="0.5"></label>
+        <label for="cmpPW">Width in<input id="cmpPW" data-k="W" type="number" min="0" step="0.5"></label>
+        <label for="cmpPH">Pallet ht in<input id="cmpPH" data-k="H" type="number" min="0" step="0.25"></label>
+        <label for="cmpPT">Pallet lb<input id="cmpPT" data-k="tare" type="number" min="0" step="1"></label>
+        <label for="cmpPM">Max load lb<input id="cmpPM" data-k="max" type="number" min="0" step="50"></label>
+      </div>
+      <div class="row r2">
+        <label for="cmpStack">Max stack height (in)<input id="cmpStack" type="number" min="1" step="0.5"></label>
+        <label for="cmpOver">Allowed overhang per side (in)<input id="cmpOver" type="number" min="0" step="0.25"></label>
+      </div>
+      <label class="check" for="cmpIncl"><input id="cmpIncl" type="checkbox"> Stack height includes the pallet itself</label>
+      <label class="check" for="cmpTip"><input id="cmpTip" type="checkbox"> Boxes may be placed on their side</label>
+      <label for="cmpShip">Units to ship (optional)<input id="cmpShip" type="number" min="0" step="1" placeholder="Shows pallets needed for each box"></label>
+    </section>
+  </div>
+  <div class="col" id="cmpResults" aria-live="polite"></div>
+</div>
+</div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <script>
@@ -333,16 +394,16 @@ function layerPattern(PL,PW,l,w){
   return f(PL,PW);
 }
 
-function usableHeight(p){return state.stackInclPallet?Math.max(0,state.stackH-p.H):state.stackH}
+function usableHeight(p,o=state){return o.stackInclPallet?Math.max(0,o.stackH-p.H):o.stackH}
 
 /* Best Ti:Hi for one item on one pallet, respecting weight limit */
-function tiHi(pkg,p){
-  const oh=state.overhang*2, L=p.L+oh, W=p.W+oh, avail=usableHeight(p);
+function tiHi(pkg,p,o=state){
+  const oh=o.overhang*2, L=p.L+oh, W=p.W+oh, avail=usableHeight(p,o);
   const dims=[pkg.L,pkg.W,pkg.H];
-  const orients=state.allowTip?[[0,1,2],[0,2,1],[1,2,0]]:[[0,1,2]];
+  const orients=o.allowTip?[[0,1,2],[0,2,1],[1,2,0]]:[[0,1,2]];
   let best=null;
-  for(const o of orients){
-    const l=dims[o[0]],w=dims[o[1]],h=dims[o[2]];
+  for(const or of orients){
+    const l=dims[or[0]],w=dims[or[1]],h=dims[or[2]];
     if(!(l>0&&w>0&&h>0)) continue;
     const pat=layerPattern(L,W,l,w); if(!pat.n) continue;
     let hi=Math.floor(avail/h+1e-9), ti=pat.n;
@@ -350,7 +411,7 @@ function tiHi(pkg,p){
     if(pkg.wt>0 && p.max>0 && cases*pkg.wt>p.max){
       cases=Math.floor(p.max/pkg.wt); hi=Math.floor(cases/ti); limitedBy="weight";
     }
-    const cand={ti,hi,cases,h,l,w,pat,limitedBy,pallet:p,offset:state.overhang};
+    const cand={ti,hi,cases,h,l,w,pat,limitedBy,pallet:p,offset:o.overhang};
     if(!best||cand.cases>best.cases||(cand.cases===best.cases&&cand.ti*cand.l*cand.w>best.ti*best.l*best.w)) best=cand;
   }
   return best;
@@ -510,33 +571,33 @@ function layerSVG(res,ci){
    <rect x="${pad+oh}" y="${pad+oh}" width="${p.L}" height="${p.W}" fill="none" stroke="var(--pallet)" stroke-width="1"/>
    ${rects}</svg>`;
 }
-function sideSVG(b,maxH){
+function sideSVG(b,maxH,o=state){
   const p=b.pallet,len=b.footL,pad=4,H=Math.max(maxH,b.height);
   const vbH=H+pad*2+8;
   let y=vbH-pad-p.H, s="";
-  s+=`<rect x="${pad+state.overhang}" y="${y}" width="${p.L}" height="${p.H}" fill="var(--pallet)"/>`;
+  s+=`<rect x="${pad+o.overhang}" y="${y}" width="${p.L}" height="${p.H}" fill="var(--pallet)"/>`;
   for(const ly of b.layers){
     const r=ly.res;const fr=ly.cases/r.ti; const w=len*Math.min(1,fr);
     y-=ly.h; s+=`<rect x="${pad}" y="${y}" width="${w}" height="${ly.h}" fill="${color(ly.sku.idx)}" stroke="var(--panel)" stroke-width=".8"/>`;
   }
-  const lim=state.stackInclPallet?state.stackH:state.stackH+p.H;
+  const lim=o.stackInclPallet?o.stackH:o.stackH+p.H;
   const ly=vbH-pad-lim;
   s+=`<line x1="0" x2="${len+pad*2}" y1="${ly}" y2="${ly}" stroke="var(--warn)" stroke-dasharray="3 2" stroke-width=".8"/>`;
   return `<svg viewBox="0 0 ${len+pad*2} ${vbH}" role="img" aria-label="Side view, ${fmt(b.height,1)} inches tall">${s}</svg>`;
 }
-function palletBoxes(b){
-  const pal=b.pallet,oh=state.overhang,Lx=pal.L+2*oh,boxes=[];let z=pal.H;
+function palletBoxes(b,o=state){
+  const pal=b.pallet,oh=o.overhang,Lx=pal.L+2*oh,boxes=[];let z=pal.H;
   b.layers.forEach((ly,li)=>{const mir=li%2===1;
     ly.res.pat.r.slice(0,ly.cases).forEach(q=>{const x=mir?Lx-q.x-q.w:q.x;
       boxes.push({x:x-oh,y:q.y-oh,z,w:q.w,h:q.h,d:ly.h,sku:ly.sku.idx})});z+=ly.h});
   return boxes;
 }
-function finishedDims(b){
-  const bx=palletBoxes(b);let x0=0,y0=0,x1=b.pallet.L,y1=b.pallet.W;
+function finishedDims(b,o=state){
+  const bx=palletBoxes(b,o);let x0=0,y0=0,x1=b.pallet.L,y1=b.pallet.W;
   bx.forEach(q=>{x0=Math.min(x0,q.x);y0=Math.min(y0,q.y);x1=Math.max(x1,q.x+q.w);y1=Math.max(y1,q.y+q.h)});
   return {L:x1-x0,W:y1-y0,H:b.height};
 }
-function isoSVG(b){
+function isoSVG(b,o=state,label){
   const c=Math.cos(Math.PI/6),P=(x,y,z)=>[(x-y)*c,(x+y)*0.5-z];
   const pal=b.pallet;let minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9;
   const poly=(pts,fill,extra="")=>{const q=pts.map(p=>P(...p));q.forEach(([x,y])=>{minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y)});
@@ -551,10 +612,10 @@ function isoSVG(b){
   [[.12,.4],[.6,.88]].forEach(([a,e])=>{
     s+=poly([[pal.L*a,pal.W,oz],[pal.L*e,pal.W,oz],[pal.L*e,pal.W,oz+oh2],[pal.L*a,pal.W,oz+oh2]],"rgba(0,0,0,.55)");
     s+=poly([[pal.L,pal.W*a,oz],[pal.L,pal.W*e,oz],[pal.L,pal.W*e,oz+oh2],[pal.L,pal.W*a,oz+oh2]],"rgba(0,0,0,.45)")});
-  const bx=palletBoxes(b).sort((p,q)=>(p.z-q.z)||((p.x+p.w/2+p.y+p.h/2)-(q.x+q.w/2+q.y+q.h/2)));
+  const bx=palletBoxes(b,o).sort((p,q)=>(p.z-q.z)||((p.x+p.w/2+p.y+p.h/2)-(q.x+q.w/2+q.y+q.h/2)));
   bx.forEach(q=>{s+=faces(q.x,q.y,q.z,q.w,q.h,q.d,color(q.sku),"rgba(0,0,0,.4)")});
   const pad=4;
-  return `<svg viewBox="${(minX-pad).toFixed(1)} ${(minY-pad).toFixed(1)} ${(maxX-minX+pad*2).toFixed(1)} ${(maxY-minY+pad*2).toFixed(1)}" role="img" aria-label="Finished pallet P${b.id}, ${fmt(b.height,1)} inches tall">${s}</svg>`;
+  return `<svg viewBox="${(minX-pad).toFixed(1)} ${(minY-pad).toFixed(1)} ${(maxX-minX+pad*2).toFixed(1)} ${(maxY-minY+pad*2).toFixed(1)}" role="img" aria-label="${esc(label||"Finished pallet P"+b.id)}, ${fmt(b.height,1)} inches tall">${s}</svg>`;
 }
 function truckSVG(T,t,ti){
   const pad=14, top=22, vbW=T.L+pad*2+28, vbH=T.W+top+pad+20;
@@ -1068,7 +1129,175 @@ $("truckPreset").addEventListener("change",e=>{state.truck=e.target.value;const 
   if(t){state.tL=t.L;state.tW=t.W;state.tH=t.H;state.tMax=t.max;syncGlobals()}rerender()});
 $("resetBtn").addEventListener("click",()=>{state=JSON.parse(JSON.stringify(EXAMPLE));palSeq=1;init()});
 function init(){syncGlobals();renderPkgs();renderPallets();rerender()}
-window.__tihi={layerPattern,plan:()=>plan(),loadTruck:b=>loadTruck(b),state:()=>state};
+/* ---------- COMPARE BOX SIZES (single pallet) ---------- */
+const PAL_PRESETS={gma:{name:"GMA 48 × 40",L:48,W:40,H:5.5,tare:45,max:2500},p4848:{name:"48 × 48",L:48,W:48,H:5.5,tare:50,max:2500},
+  p4842:{name:"48 × 42",L:48,W:42,H:5.5,tare:45,max:2500},p4242:{name:"42 × 42",L:42,W:42,H:5.5,tare:40,max:2500},
+  p4040:{name:"40 × 40",L:40,W:40,H:5.5,tare:38,max:2500},eur1:{name:"EUR 1 (1200 × 800 mm)",L:47.25,W:31.5,H:5.7,tare:55,max:3300},
+  eur2:{name:"EUR 2 (1200 × 1000 mm)",L:47.25,W:39.375,H:5.7,tare:60,max:2200}};
+const CMP_EX={item:"12 oz jar",ship:0,preset:"gma",pal:{...PAL_PRESETS.gma},stackH:52,overhang:0,stackInclPallet:true,allowTip:false,
+  boxes:[{name:"Box A (4 × 3)",L:12,W:9,H:5,wt:14,units:12},{name:"Box B (6 × 2)",L:17.5,W:6,H:5,wt:14,units:12}]};
+let cmp=JSON.parse(JSON.stringify(CMP_EX));
+const CMP_MAX=8;
+
+function cmpCalc(){
+  const p={...cmp.pal,id:"cmp",name:PAL_PRESETS[cmp.preset]?PAL_PRESETS[cmp.preset].name:"Custom pallet"};
+  const avail=usableHeight(p,cmp), ship=Math.max(0,Math.floor(num(cmp.ship)));
+  const rows=cmp.boxes.map((b,i)=>{
+    const units=Math.max(1,Math.floor(num(b.units,1)));
+    const base={b,i,units};
+    if(!(p.L>0&&p.W>0)) return {...base,err:"Enter the pallet length and width."};
+    if(!(b.L>0&&b.W>0&&b.H>0)) return {...base,err:"Enter L, W and H for this box."};
+    const r=tiHi(b,p,cmp);
+    if(!r||r.cases<1) return {...base,err:"Doesn't fit on this pallet with the current stack height or weight limit."};
+    const extra=r.cases-r.ti*r.hi;
+    const layers=Array.from({length:r.hi},()=>({sku:{idx:i},cases:r.ti,h:r.h,res:r})).concat(extra>0?[{sku:{idx:i},cases:extra,h:r.h,res:r}]:[]);
+    const loadH=layers.length*r.h, height=p.H+loadH;
+    const build={pallet:p,layers,height,footL:p.L+2*cmp.overhang,id:LETTERS[i]};
+    return {...base,r,build,boxes:r.cases,unitsPP:r.cases*units,
+      coverage:r.ti*r.l*r.w/(p.L*p.W)*100,
+      cube:r.cases*b.L*b.W*b.H/(p.L*p.W*avail)*100,
+      loadH,height,unused:Math.max(0,avail-loadH),
+      gross:r.cases*num(b.wt)+num(p.tare),net:r.cases*num(b.wt),
+      pallets:ship>0?Math.ceil(ship/(r.cases*units)):null,dims:finishedDims(build,cmp)};
+  });
+  const ok=rows.filter(x=>!x.err);
+  const ranked=[...ok].sort((a,b)=>(b.unitsPP-a.unitsPP)||(b.cube-a.cube));
+  ranked.forEach((x,k)=>x.rank=k+1);
+  return {p,avail,ship,rows,ranked};
+}
+
+function cmpRenderInputs(){
+  $("cmpItem").value=cmp.item;
+  $("cmpList").innerHTML=cmp.boxes.map((b,i)=>`
+   <div class="item" data-i="${i}">
+     <div class="item-head"><span class="swatch" style="background:${color(i)}"></span>
+       <input id="cb-name-${i}" data-f="name" list="libNames" autocomplete="off" value="${esc(b.name)}" aria-label="Box ${i+1} name">
+       ${cmp.boxes.length>2?`<button class="x" type="button" data-del="${i}" aria-label="Remove ${esc(b.name)}">Remove</button>`:""}</div>
+     <div class="row r4">
+       <label for="cb-L-${i}">L in<input id="cb-L-${i}" data-f="L" type="number" min="0" step="0.25" value="${b.L}"></label>
+       <label for="cb-W-${i}">W in<input id="cb-W-${i}" data-f="W" type="number" min="0" step="0.25" value="${b.W}"></label>
+       <label for="cb-H-${i}">H in<input id="cb-H-${i}" data-f="H" type="number" min="0" step="0.25" value="${b.H}"></label>
+       <label for="cb-wt-${i}">Wt lb<input id="cb-wt-${i}" data-f="wt" type="number" min="0" step="0.1" value="${b.wt}"></label>
+     </div>
+     <label for="cb-units-${i}">Units per box<input id="cb-units-${i}" data-f="units" type="number" min="1" step="1" value="${b.units}"></label>
+   </div>`).join("");
+  $("cmpAdd").disabled=cmp.boxes.length>=CMP_MAX;
+  $("cmpPreset").innerHTML=Object.entries(PAL_PRESETS).map(([k,v])=>`<option value="${k}">${esc(v.name)} in</option>`).join("")+`<option value="custom">Custom</option>`;
+  $("cmpPreset").value=cmp.preset;
+  $("cmpPL").value=cmp.pal.L;$("cmpPW").value=cmp.pal.W;$("cmpPH").value=cmp.pal.H;$("cmpPT").value=cmp.pal.tare;$("cmpPM").value=cmp.pal.max;
+  $("cmpStack").value=cmp.stackH;$("cmpOver").value=cmp.overhang;$("cmpIncl").checked=cmp.stackInclPallet;$("cmpTip").checked=cmp.allowTip;
+  $("cmpShip").value=cmp.ship||"";
+}
+
+function cmpRenderResults(){
+  const C=cmpCalc(), item=cmp.item.trim()||"units", ok=C.ranked;
+  const unitWord=cmp.boxes.every(b=>Math.max(1,Math.floor(num(b.units,1)))===1)?"boxes":"units";
+  let h="";
+  C.rows.filter(x=>x.err).forEach(x=>{h+=`<div class="alert"><b>${esc(x.b.name)}:</b> ${x.err}</div>`});
+  if(!ok.length){$("cmpResults").innerHTML=h||`<div class="alert">Add at least two box sizes.</div>`;return}
+  const best=ok[0], second=ok[1];
+  // Verdict
+  let verdict;
+  if(!second) verdict=`Only <b>${esc(best.b.name)}</b> fits right now, at ${fmt(best.unitsPP)} ${unitWord} per pallet.`;
+  else if(best.unitsPP>second.unitsPP){
+    const d=best.unitsPP-second.unitsPP, pct=d/second.unitsPP*100;
+    verdict=`<b>${esc(best.b.name)}</b> is the most efficient. It puts ${fmt(best.unitsPP)} ${unitWord}${unitWord==="units"&&cmp.item.trim()?" of "+esc(cmp.item.trim()):""} on a pallet, ${fmt(d)} more (+${fmt(pct,1)}%) than ${esc(second.b.name)}.`;
+  } else verdict=`<b>${esc(best.b.name)}</b> and <b>${esc(second.b.name)}</b> tie at ${fmt(best.unitsPP)} ${unitWord} per pallet. ${esc(best.b.name)} fills more of the pallet's cube (${fmt(best.cube,1)}% vs ${fmt(second.cube,1)}%).`;
+  const maxU=Math.max(...ok.map(x=>x.unitsPP));
+  h+=`<section class="panel"><div class="panel-head"><h2>Result</h2><span class="hint">${esc(C.p.name)} · ${fmt(C.avail,1)} in usable height</span></div>
+    <p class="verdict">${verdict}</p>
+    <div class="cmpbars">${[...ok].sort((a,b)=>a.i-b.i).map(x=>`<div class="cmpbar"><span class="nm"><i class="swatch" style="background:${color(x.i)}"></i>${esc(x.b.name)}</span>
+      <div class="bar"><i style="width:${x.unitsPP/maxU*100}%;background:${color(x.i)}"></i></div>
+      <span class="val">${fmt(x.unitsPP)} ${unitWord}</span></div>`).join("")}</div>
+    ${C.ship&&ok.length>1?`<p class="hint">To ship ${fmt(C.ship)} ${unitWord}: ${[...ok].sort((a,b)=>a.pallets-b.pallets||a.i-b.i).map(x=>`${esc(x.b.name)} needs ${fmt(x.pallets)} pallet${x.pallets===1?"":"s"}`).join(", ")}.</p>`:""}
+  </section>`;
+  // Side-by-side table
+  const cols=C.rows;
+  const cell=(x,fn)=>x.err?"–":fn(x);
+  const bestOf=(key,dir)=>{const v=ok.map(x=>x[key]);const t=dir>0?Math.max(...v):Math.min(...v),same=Math.max(...v)-Math.min(...v)<1e-9;return x=>!x.err&&!same&&Math.abs(x[key]-t)<1e-9};
+  const metric=(label,fn,key,dir)=>{const isB=key?bestOf(key,dir):()=>false;
+    return `<tr><th scope="row">${label}</th>${cols.map(x=>`<td class="n${isB(x)?" best":""}">${cell(x,fn)}</td>`).join("")}</tr>`};
+  h+=`<section class="panel"><div class="panel-head"><h2>Side by side</h2><span class="hint">Underlined = best in that row</span></div>
+   <div class="tablewrap"><table><thead><tr><th></th>${cols.map(x=>`<th class="opt"><span style="display:inline-flex;align-items:center;gap:6px"><i class="swatch" style="background:${color(x.i)}"></i>${esc(x.b.name)}</span></th>`).join("")}</tr></thead><tbody>
+   ${metric("Box size L × W × H in",x=>`${x.b.L} × ${x.b.W} × ${x.b.H}`)}
+   ${metric("Units per box",x=>fmt(x.units))}
+   ${metric("Ti (boxes per layer)",x=>x.r.ti)}
+   ${metric("Hi (layers)",x=>x.r.hi+(x.boxes>x.r.ti*x.r.hi?" + partial":""))}
+   ${metric("Boxes per pallet",x=>fmt(x.boxes))}
+   ${metric(unitWord==="boxes"?"Units per pallet":`Units (${esc(item)}) per pallet`,x=>`<b>${fmt(x.unitsPP)}</b>`,"unitsPP",1)}
+   ${metric("Layer coverage",x=>fmt(x.coverage,1)+"%","coverage",1)}
+   ${metric("Cube utilization",x=>fmt(x.cube,1)+"%","cube",1)}
+   ${metric("Pallet height in",x=>fmt(x.height,1))}
+   ${metric("Unused height in",x=>fmt(x.unused,1),"unused",-1)}
+   ${metric("Footprint L × W in",x=>`${fmt(x.dims.L,1)} × ${fmt(x.dims.W,1)}`)}
+   ${metric("Product weight lb",x=>fmt(x.net))}
+   ${metric("Gross weight lb",x=>fmt(x.gross))}
+   ${metric("Limited by",x=>x.r.limitedBy==="weight"?'<span class="pill warn">weight</span>':"height")}
+   ${C.ship?metric(`Pallets for ${fmt(C.ship)}`,x=>fmt(x.pallets),"pallets",-1):""}
+   </tbody></table></div>
+   <p class="hint">Layer coverage is how much of the pallet deck one layer covers. Cube utilization is box volume on the pallet divided by pallet deck area × usable height. Both can pass 100% when overhang is allowed.</p></section>`;
+  // Cards
+  const maxH=Math.max(cmp.stackInclPallet?cmp.stackH:cmp.stackH+num(cmp.pal.H),...ok.map(x=>x.height),1);
+  h+=`<section class="panel"><div class="panel-head"><h2>Pallet for each box</h2><span class="hint">Every other layer turned for interlock</span></div><div class="cards">`;
+  for(const x of cols){
+    if(x.err){h+=`<div class="card"><div class="item-head"><span class="swatch" style="background:${color(x.i)}"></span><h3>${esc(x.b.name)}</h3></div><p class="hint">${x.err}</p></div>`;continue}
+    const r=x.r, win=x.rank===1&&ok.length>1;
+    h+=`<div class="card${win?" win":""}">
+      <div class="item-head"><span class="swatch" style="background:${color(x.i)}"></span><h3>${esc(x.b.name)}</h3><span class="pill${win?" mix":""}" style="margin-left:auto">${win?"Best":"#"+x.rank}</span></div>
+      <div class="tihi">${r.ti}:${r.hi}<small>= ${fmt(x.boxes)} BOXES · ${fmt(x.unitsPP)} ${unitWord.toUpperCase()}</small></div>
+      <figure class="iso">${isoSVG(x.build,cmp,esc(x.b.name)+" pallet")}</figure>
+      <div class="figs"><figure>${layerSVG(r,x.i)}<figcaption>Layer, top view</figcaption></figure>
+        <figure>${sideSVG(x.build,maxH,cmp)}<figcaption>Side view · red = max height</figcaption></figure></div>
+      <dl class="kv">
+        <dt>Placed as</dt><dd>${r.l}×${r.w} footprint, ${r.h} in up</dd>
+        <dt>Finished size</dt><dd>${fmt(x.dims.L,1)} × ${fmt(x.dims.W,1)} × ${fmt(x.height,1)} in</dd>
+        <dt>Cube utilization</dt><dd>${fmt(x.cube,1)}%</dd>
+        <dt>Gross weight</dt><dd>${fmt(x.gross)} lb</dd>
+      </dl></div>`;
+  }
+  h+=`</div></section>`;
+  $("cmpResults").innerHTML=h;
+}
+function cmpRerender(){try{cmpRenderResults()}catch(e){$("cmpResults").innerHTML=`<div class="alert">Couldn't calculate: ${esc(e.message)}</div>`}}
+$("cmpList").addEventListener("input",e=>{
+  const it=e.target.closest(".item"),f=e.target.dataset.f;if(!it||!f)return;
+  const n=+it.dataset.i,b=cmp.boxes[n];
+  b[f]=f==="name"?e.target.value:num(e.target.value);
+  if(f==="name"){const s=LIB.find(x=>String(x.name).trim().toLowerCase()===e.target.value.trim().toLowerCase());
+    if(s)["L","W","H","wt"].forEach(k=>{b[k]=+s[k];const el=$(`cb-${k}-${n}`);if(el)el.value=s[k]})}
+  cmpRerender();
+});
+$("cmpList").addEventListener("click",e=>{const d=e.target.dataset.del;if(d===undefined)return;
+  cmp.boxes.splice(+d,1);cmpRenderInputs();cmpRerender()});
+$("cmpAdd").addEventListener("click",()=>{if(cmp.boxes.length>=CMP_MAX)return;
+  const last=cmp.boxes[cmp.boxes.length-1]||{L:12,W:12,H:12,wt:20,units:1};
+  cmp.boxes.push({name:"Box "+LETTERS[cmp.boxes.length],L:last.L,W:last.W,H:last.H,wt:last.wt,units:last.units});
+  cmpRenderInputs();cmpRerender();const el=$("cb-name-"+(cmp.boxes.length-1));if(el){el.focus();el.select()}});
+$("cmpItem").addEventListener("input",e=>{cmp.item=e.target.value;cmpRerender()});
+$("cmpPreset").addEventListener("change",e=>{cmp.preset=e.target.value;const p=PAL_PRESETS[cmp.preset];
+  if(p){cmp.pal={L:p.L,W:p.W,H:p.H,tare:p.tare,max:p.max};cmpRenderInputs()}cmpRerender()});
+["cmpPL","cmpPW","cmpPH","cmpPT","cmpPM"].forEach(id=>$(id).addEventListener("input",e=>{cmp.pal[e.target.dataset.k]=num(e.target.value);
+  cmp.preset="custom";$("cmpPreset").value="custom";cmpRerender()}));
+$("cmpStack").addEventListener("input",e=>{cmp.stackH=num(e.target.value);cmpRerender()});
+$("cmpOver").addEventListener("input",e=>{cmp.overhang=num(e.target.value);cmpRerender()});
+$("cmpIncl").addEventListener("change",e=>{cmp.stackInclPallet=e.target.checked;cmpRerender()});
+$("cmpTip").addEventListener("change",e=>{cmp.allowTip=e.target.checked;cmpRerender()});
+$("cmpShip").addEventListener("input",e=>{cmp.ship=num(e.target.value);cmpRerender()});
+$("cmpExample").addEventListener("click",()=>{cmp=JSON.parse(JSON.stringify(CMP_EX));cmpRenderInputs();cmpRerender()});
+
+/* ---------- PAGES ---------- */
+function showPage(pg){
+  if(pg!=="compare")pg="builder";
+  $("builderPage").hidden=pg!=="builder";$("comparePage").hidden=pg!=="compare";
+  document.querySelectorAll(".pagenav button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.page===pg));
+  const want=pg==="compare"?"#compare":"";
+  if(location.hash!==want)history.replaceState(null,"",location.pathname+location.search+want);
+}
+document.querySelector(".pagenav").addEventListener("click",e=>{const pg=e.target.dataset.page;if(pg){showPage(pg);window.scrollTo(0,0)}});
+window.addEventListener("hashchange",()=>showPage(location.hash.slice(1)));
+cmpRenderInputs();cmpRerender();showPage(location.hash.slice(1));
+
+window.__tihi={layerPattern,plan:()=>plan(),loadTruck:b=>loadTruck(b),state:()=>state,compare:()=>cmpCalc()};
 init();
 })();
 </script>
