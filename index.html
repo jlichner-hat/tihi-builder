@@ -1486,7 +1486,7 @@ function parseCsv(text){
   text=String(text).replace(/^﻿/,"");
   for(let i=0;i<text.length;i++){const c=text[i];
     if(q){if(c==='"'){if(text[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
-    else if(c==='"')q=true;
+    else if(c==='"'&&f==="")q=true;
     else if(c===","){row.push(f);f=""}
     else if(c==="\n"||c==="\r"){if(c==="\r"&&text[i+1]==="\n")i++;row.push(f);rows.push(row);row=[];f=""}
     else f+=c}
@@ -1514,15 +1514,25 @@ function bfColumns(head){
                x=>x.includes("name")||x.includes("sku")||x.includes("part")||x.includes("item"),x=>x.includes("desc"));
   return {L,W,H,D,N};
 }
+const BF_DIMKEY=/^(l|w|h|d|ht|len|wid|length|width|height|depth)$/;
 function bfLoadCsv(text,source){
   const rows=parseCsv(text);
   if(rows.length<2)throw new Error("The list is empty.");
-  // header = first row with at least two non-numeric cells
-  let hi=rows.findIndex(r=>r.filter(c=>c.trim()&&isNaN(parseDim(c))).length>=2);if(hi<0)hi=0;
-  const head=rows[hi].map(h=>h.trim()),c=bfColumns(head);
+  // Header = first row whose cells name the box dimensions (skips title and group rows above it).
+  const cols=rows.map(r=>bfColumns(r.map(h=>h.trim())));
+  let hi=cols.findIndex(c=>c.L>=0&&c.W>=0&&c.H>=0);
+  if(hi<0)hi=cols.findIndex(c=>c.D>=0);
+  if(hi<0)throw new Error("Couldn't find length, width and height columns. Name them Length, Width and Height (or one Dimensions column like 12 x 10 x 8).");
+  const head=rows[hi].map(h=>h.trim()),c=cols[hi];
   const hasLWH=c.L>=0&&c.W>=0&&c.H>=0;
-  if(!hasLWH&&c.D<0)throw new Error("Couldn't find length, width and height columns. Name them Length, Width and Height (or one Dimensions column like 12 x 10 x 8).");
-  const used=new Set([c.L,c.W,c.H,c.D,c.N].filter(i=>i>=0));
+  // Group labels from the row above (merged cells only fill their first column, so carry them right).
+  let g="";const group=head.map((_,i)=>{const v=hi>0?(rows[hi-1][i]||"").trim():"";if(v)g=v.toLowerCase();return v||i===0?g:g});
+  // The first Length/Width/Height set is the inside size. A later set grouped as "outside"
+  // (not metric) is shown as the outside size; other repeated dimension columns are hidden.
+  const dimCols=head.map((h,i)=>i).filter(i=>BF_DIMKEY.test(bfKey(head[i])));
+  const outCols=dimCols.filter(i=>/outside|exterior|outer|\bod\b/.test(group[i])&&!/metric|mm|cm/.test(group[i]));
+  const oc=outCols.length>=3?bfColumns(head.map((h,i)=>outCols.includes(i)?h:"")):null;
+  const used=new Set([c.L,c.W,c.H,c.D,c.N,...dimCols].filter(i=>i>=0));
   const extra=head.map((h,i)=>({h,i})).filter(x=>x.h&&!used.has(x.i));
   const out=[];
   rows.slice(hi+1).forEach((r,n)=>{
@@ -1531,10 +1541,12 @@ function bfLoadCsv(text,source){
     else{const parts=String(r[c.D]||"").split(/\s*[x×X*]\s*/);d=parts.length===3?parts.map(parseDim):[NaN]}
     if(d.length!==3||d.some(v=>!(v>0)))return;
     const name=(c.N>=0?r[c.N]:"").trim()||`Row ${hi+n+2}`;
-    out.push({name,L:d[0],W:d[1],H:d[2],extra:extra.map(x=>(r[x.i]||"").trim())});
+    const ex=extra.map(x=>(r[x.i]||"").trim());
+    if(oc){const od=[r[oc.L],r[oc.W],r[oc.H]].map(parseDim);ex.push(od.every(v=>v>0)?od.map(bfN).join(" × ")+" in":"")}
+    out.push({name,L:d[0],W:d[1],H:d[2],extra:ex});
   });
   if(!out.length)throw new Error("No rows with three box dimensions were found.");
-  bf.rows=out;bf.extra=extra.map(x=>x.h);bf.source=source;bf.nameCol=c.N>=0?head[c.N]:"Box";
+  bf.rows=out;bf.extra=extra.map(x=>x.h).concat(oc?["Outside size"]:[]);bf.source=source;bf.nameCol=c.N>=0?head[c.N]:"Box";
   return out.length;
 }
 function bfSrc(t,cls){const m=$("bfSrcMsg");m.textContent=t;m.className="hint"+(cls?" msg "+cls:"")}
@@ -1602,7 +1614,7 @@ function bfRun(){
   top.forEach((x,i)=>{
     const empty=100*(1-pVol/x.vol);
     h+=`<div class="card${i===0?" win":""}"><div class="panel-head"><h3>${esc(x.b.name)}</h3>${i===0?`<span class="pill mix">Best fit</span>`:`<span class="pill">#${i+1}</span>`}</div>
-      <div class="tihi">${bfDims(x.b)}<small>IN</small></div>
+      <div class="tihi">${bfDims(x.b)}<small>IN INSIDE</small></div>
       <dl class="kv"><dt>Product sits as</dt><dd>${x.f.q.map(v=>bfN(v-2*pad)).join(" × ")}</dd>
       <dt>Extra room L / W / H</dt><dd>${x.f.room.map(bfN).join(" / ")} in</dd>
       <dt>Empty space</dt><dd>${fmt(empty,0)}%</dd>
