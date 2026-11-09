@@ -6,5 +6,5 @@ window.TIHI_CONFIG = {
 };
 
 // Box inventory for the Box finder page: the Google Sheet's "Publish to web" CSV link.
-// Leave empty to show a sample list.
-window.TIHI_CONFIG.boxInventoryCsv = "";
+// Leave empty to show a sample list. Currently: the "2025 Box List" tab.
+window.TIHI_CONFIG.boxInventoryCsv = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTphlguvWk0ySfPXgR-cbPTjpjltnBVUULFp_VOzhmnqOFIw_GkJs0akClrZrMs-FA58G7XPho-z27g/pub?gid=569861441&single=true&output=csv";
