@@ -49,6 +49,7 @@ input[type=checkbox]{width:auto}
 button{font:inherit;font-weight:600;font-size:.85rem;border-radius:4px;border:1px solid var(--line);background:var(--soft);color:var(--ink);padding:6px 12px;cursor:pointer}
 button:hover{border-color:var(--muted)}
 button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+a.btnlink{font-weight:600;font-size:.85rem;border-radius:4px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);padding:6px 12px;text-decoration:none}
 button.x{padding:2px 8px;font-size:.8rem;color:var(--warn);background:transparent}
 .row{display:grid;gap:8px}
 .r2{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -339,27 +340,35 @@ th.opt{text-align:right}
 <header>
   <div>
     <h1>Box finder</h1>
-    <p class="sub">Enter a product's size and find the closest boxes in stock that it fits inside, smallest first. The product can be turned any way unless you keep a side up.</p>
+    <p class="sub">Enter a product's size, or the cubic volume you need, and find the closest boxes in stock, smallest first. In a size search the product can be turned any way unless you keep a side up.</p>
   </div>
   <div class="hdr-actions"><button id="bfReload" type="button">Reload inventory</button></div>
 </header>
 <div class="grid">
   <div class="col">
     <section class="panel" aria-labelledby="bfProdH">
-      <div class="panel-head"><div><div class="step">Step 1</div><h2 id="bfProdH">Product size</h2></div></div>
+      <div class="panel-head"><div><div class="step">Step 1</div><h2 id="bfProdH">Search</h2></div>
+        <div class="tabs" id="bfModes"><button type="button" data-mode="size" aria-pressed="true">By size</button><button type="button" data-mode="vol" aria-pressed="false">By cubic volume</button></div></div>
       <form id="bfForm" class="col" style="gap:12px" novalidate>
+        <div id="bfByVol" class="col" style="gap:8px" hidden>
+          <div class="row r2">
+            <label for="bfVol">Cubic volume needed<input id="bfVol" type="text" inputmode="decimal" autocomplete="off" placeholder="0.5"></label>
+            <label for="bfVolU">Units<select id="bfVolU"><option value="ft">cubic feet</option><option value="in">cubic inches</option></select></label>
+          </div>
+          <p class="hint">Finds boxes with at least this much space inside, closest first. It compares volume only, so check that the product's shape fits the box.</p>
+        </div>
+        <div id="bfBySize" class="col" style="gap:12px">
         <div class="row r3">
           <label for="bfL">Length in<input id="bfL" type="text" inputmode="decimal" autocomplete="off" placeholder="12"></label>
           <label for="bfW">Width in<input id="bfW" type="text" inputmode="decimal" autocomplete="off" placeholder="9 1/2"></label>
           <label for="bfH">Height in<input id="bfH" type="text" inputmode="decimal" autocomplete="off" placeholder="6"></label>
         </div>
         <p class="hint">Inches. Decimals or fractions both work, like 9.5 or 9 1/2.</p>
-        <div class="row r2">
-          <label for="bfPad">Extra room per side (in)<input id="bfPad" type="number" min="0" step="0.125" value="0"></label>
-          <label for="bfCount">Boxes to show<select id="bfCount"><option>3</option><option>4</option><option selected>5</option></select></label>
-        </div>
+        <label for="bfPad">Extra room per side (in)<input id="bfPad" type="number" min="0" step="0.125" value="0"></label>
         <p class="hint">Extra room adds space on every side for padding or dunnage. 0.25 in per side makes the box 0.5 in bigger each way.</p>
         <label class="check" for="bfUp"><input id="bfUp" type="checkbox"> Keep height up (product can't be laid on its side)</label>
+        </div>
+        <label for="bfCount">Boxes to show<select id="bfCount"><option>3</option><option>4</option><option selected>5</option></select></label>
         <button class="primary" type="submit">Find boxes</button>
       </form>
     </section>
@@ -1590,7 +1599,50 @@ function bfFit(p,b,upright){
   }
   return best;
 }
+let bfMode="size";
+const BF_ULINE="https://www.uline.com/Cls_04/Boxes-Corrugated";
+function bfSetMode(m){bfMode=m;$("bfBySize").hidden=m!=="size";$("bfByVol").hidden=m!=="vol";
+  document.querySelectorAll("#bfModes button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.mode===m));bfRun()}
+function bfCard(x,i,rows){
+  return `<div class="card${i===0?" win":""}"><div class="panel-head"><h3>${esc(x.b.name)}</h3>${i===0?`<span class="pill mix">Best fit</span>`:`<span class="pill">#${i+1}</span>`}</div>
+      <div class="tihi">${bfDims(x.b)}<small>IN INSIDE</small></div>
+      <dl class="kv">${rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join("")}
+      ${bf.extra.map((e,j)=>x.b.extra[j]?`<dt>${esc(e)}</dt><dd>${esc(x.b.extra[j])}</dd>`:"").join("")}</dl></div>`;
+}
+function bfRunVol(){
+  const box=$("bfResults"),raw=$("bfVol").value,unit=$("bfVolU").value,count=+$("bfCount").value||5;
+  if(!String(raw).trim()){box.innerHTML=`<section class="panel"><div class="panel-head"><h2>Closest boxes</h2></div><p class="hint">Enter the cubic volume you need to see the closest boxes in stock.</p></section>`;return}
+  const v=parseDim(raw);if(!(v>0)){box.innerHTML=`<div class="alert">Enter a volume greater than zero.</div>`;return}
+  const k=unit==="ft"?1728:1,need=v*k,u=unit==="ft"?"cu ft":"cu in",d=unit==="ft"?3:0;
+  const all=bf.rows.map(b=>({b,vol:b.L*b.W*b.H}));
+  const fits=all.filter(x=>x.vol>=need-1e-9).sort((a,c)=>a.vol-c.vol);
+  let h=`<section class="panel"><div class="panel-head"><h2>Closest boxes</h2><span class="hint">${bfN(v)} ${u} · ${fmt(fits.length)} of ${fmt(bf.rows.length)} boxes are big enough</span></div>`;
+  if(!fits.length){
+    const big=all.sort((a,c)=>c.vol-a.vol)[0];
+    h+=`<div class="alert">No box in the list holds ${bfN(v)} ${u}.</div>`;
+    if(big)h+=`<p class="hint">Largest: ${esc(big.b.name)} (${bfDims(big.b)}, ${fmt(big.vol/k,d)} ${u}).</p>`;
+    box.innerHTML=h+`</section>`;return}
+  h+=`<div class="cards">`+fits.slice(0,count).map((x,i)=>bfCard(x,i,[
+    ["Inside volume",`${fmt(x.vol/k,d)} ${u}`],["Extra volume",`${fmt((x.vol-need)/k,d)} ${u}`],["Filled",`${fmt(100*need/x.vol,0)}%`]])).join("")+`</div>`;
+  h+=`<p class="hint">Sorted smallest box first. Inside volume is worked out from the inside length, width and height, so it can differ from the sheet's Cubic volume column.</p></section>`;
+  box.innerHTML=h;
+}
+// Smallest whole-inch box that holds the product: a starting point for a Uline size search.
+function bfUlinePanel(need,up,best,pVol){
+  let s=need.map(v=>Math.ceil(v-1e-9));
+  if(!up){s.sort((a,c)=>c-a)}else{const f=[s[0],s[1]].sort((a,c)=>c-a);s=[f[0],f[1],s[2]]}
+  const txt=s.join(" x "),sv=s[0]*s[1]*s[2];
+  const note=!best?"Nothing in stock fits, so a purchased box is the way to go.":
+    sv<best.vol-1e-9?`A ${s.join(" × ")} box would leave ${fmt(100*(1-pVol/sv),0)}% empty space, against ${fmt(100*(1-pVol/best.vol),0)}% in ${esc(best.b.name)}.`:
+    `${esc(best.b.name)} is already as tight as a whole-inch box, so Uline isn't likely to beat it.`;
+  return `<section class="panel"><div class="panel-head"><h2>Check Uline</h2><span class="hint">Closest whole-inch size</span></div>
+    <div class="tihi">${s.join(" × ")}<small>IN INSIDE</small></div>
+    <p class="hint">${note} Uline sells most whole-inch sizes. Open their box page and type <b class="mono">${txt}</b> into Search by Size.</p>
+    <div class="hdr-actions"><a class="btnlink" href="${BF_ULINE}" target="_blank" rel="noopener">Open Uline boxes</a><button type="button" id="bfCopy" data-size="${txt}">Copy size</button></div>
+    <p id="bfCopyMsg" class="hint" role="status"></p></section>`;
+}
 function bfRun(){
+  if(bfMode==="vol")return bfRunVol();
   const box=$("bfResults");
   const raw=[$("bfL").value,$("bfW").value,$("bfH").value],dims=raw.map(parseDim);
   if(raw.every(v=>!String(v).trim())){
@@ -1609,19 +1661,13 @@ function bfRun(){
     const near=bf.rows.map(b=>({b,short:bfShort(need,b,up)})).sort((a,c)=>a.short-c.short||a.b.L*a.b.W*a.b.H-c.b.L*c.b.W*c.b.H).slice(0,3);
     h+=`<div class="alert">No box in the list is big enough${up?" with the height kept up":""}.</div>`;
     if(near.length)h+=`<p class="hint">Nearest: ${near.map(x=>`${esc(x.b.name)} (${bfDims(x.b)}, short by ${bfN(x.short)} in)`).join("; ")}.</p>`;
-    box.innerHTML=h+`</section>`;return}
-  h+=`<div class="cards">`;
-  top.forEach((x,i)=>{
-    const empty=100*(1-pVol/x.vol);
-    h+=`<div class="card${i===0?" win":""}"><div class="panel-head"><h3>${esc(x.b.name)}</h3>${i===0?`<span class="pill mix">Best fit</span>`:`<span class="pill">#${i+1}</span>`}</div>
-      <div class="tihi">${bfDims(x.b)}<small>IN INSIDE</small></div>
-      <dl class="kv"><dt>Product sits as</dt><dd>${x.f.q.map(v=>bfN(v-2*pad)).join(" × ")}</dd>
-      <dt>Extra room L / W / H</dt><dd>${x.f.room.map(bfN).join(" / ")} in</dd>
-      <dt>Empty space</dt><dd>${fmt(empty,0)}%</dd>
-      ${bf.extra.map((e,j)=>x.b.extra[j]?`<dt>${esc(e)}</dt><dd>${esc(x.b.extra[j])}</dd>`:"").join("")}</dl></div>`;
-  });
-  h+=`</div><p class="hint">Sorted smallest box first. Extra room is the space left over in each direction${pad?", after the padding you asked for":""}. Empty space is how much of the box the product doesn't fill.</p></section>`;
-  box.innerHTML=h;
+    box.innerHTML=h+`</section>`+bfUlinePanel(need,up,null,pVol);return}
+  h+=`<div class="cards">`+top.map((x,i)=>bfCard(x,i,[
+    ["Product sits as",x.f.q.map(v=>bfN(v-2*pad)).join(" × ")],
+    ["Extra room L / W / H",`${x.f.room.map(bfN).join(" / ")} in`],
+    ["Empty space",`${fmt(100*(1-pVol/x.vol),0)}%`]])).join("")+`</div>`;
+  h+=`<p class="hint">Sorted smallest box first. Extra room is the space left over in each direction${pad?", after the padding you asked for":""}. Empty space is how much of the box the product doesn't fill.</p></section>`;
+  box.innerHTML=h+bfUlinePanel(need,up,top[0],pVol);
 }
 const bfN=v=>Number(v).toLocaleString(undefined,{maximumFractionDigits:3});
 const bfDims=b=>[b.L,b.W,b.H].map(bfN).join(" × ");
@@ -1629,6 +1675,11 @@ $("bfForm").addEventListener("submit",e=>{e.preventDefault();bfRun()});
 ["bfL","bfW","bfH","bfPad"].forEach(id=>$(id).addEventListener("input",bfRun));
 ["bfUp","bfCount"].forEach(id=>$(id).addEventListener("change",bfRun));
 $("bfReload").addEventListener("click",bfInit);
+$("bfModes").addEventListener("click",e=>{const m=e.target.dataset.mode;if(m)bfSetMode(m)});
+$("bfVol").addEventListener("input",bfRun);$("bfVolU").addEventListener("change",bfRun);
+$("bfResults").addEventListener("click",async e=>{if(e.target.id!=="bfCopy")return;
+  try{await navigator.clipboard.writeText(e.target.dataset.size);$("bfCopyMsg").textContent="Copied."}
+  catch(err){$("bfCopyMsg").textContent="Couldn't copy. The size is "+e.target.dataset.size+"."}});
 $("bfUrlLoad").addEventListener("click",()=>{const u=$("bfUrl").value.trim();lsSet(BF_KEY,u);bfInit()});
 $("bfUrlClear").addEventListener("click",()=>{lsSet(BF_KEY,"");bfInit()});
 $("bfFile").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;
