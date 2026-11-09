@@ -8,6 +8,8 @@ Pallet and truck load planner with company accounts. It's a static site (`index.
 - Personal email domains (gmail.com, yahoo.com, ...) are refused, because they can't identify a company. The list is in the `blocked_domains` table.
 - A **site admin** (you) approves each new company from the **Approve companies** button. Until then, its users see a "waiting for approval" screen.
 - Saved items (name, L × W × H, weight) belong to one company. Database row level security makes other companies' items unreadable, even to someone calling the API directly.
+- **Roles** decide which pages someone sees. **User** (the default for new sign-ups): Shipment builder only. **Packaging engineer**: also Compare box sizes and Box finder. **Admin** (the company's first sign-up): every page, plus the **Admin** button, where they set the role of anyone in their company. Site admins can set anyone's role. Roles are changed through a database function that checks the caller is an admin, so people can't promote themselves.
+- Hiding pages is a convenience, not a lock on the data: the box inventory is a published Google Sheet, and anyone who has its link can open it.
 - Users sign in with their email and password. Passwords are stored and hashed by Supabase Auth and never touch this site's tables.
 
 ## Setup
@@ -17,7 +19,8 @@ Pallet and truck load planner with company accounts. It's a static site (`index.
 3. **Email sending:** Supabase's built-in email only sends a few messages per hour and is meant for testing. Before real users sign up, add your own SMTP (Authentication > Emails > SMTP Settings), for example Resend, SendGrid, or your company mail server.
 4. **Keys:** `config.js` already has this project's URL and public anon key. The anon key is meant to be public, and the access rules protect the data.
 5. **Hosting (GitHub Pages):** push this folder to the repo, then in GitHub go to Settings > Pages and choose "Deploy from a branch", `main`, `/ (root)`.
-6. **Make yourself site admin:** sign up on the site and verify your email. Then run this in the SQL editor:
+6. **Roles on an existing database:** if the database was set up before roles were added, run `supabase/roles.sql` once in the SQL Editor.
+7. **Make yourself site admin:** sign up on the site and verify your email. Then run this in the SQL editor:
    ```sql
    insert into public.app_admins(user_id)
    select id from auth.users where email = 'you@yourcompany.com';
@@ -34,4 +37,5 @@ Pallet and truck load planner with company accounts. It's a static site (`index.
 2. Paste the link into `boxInventoryCsv` in `config.js`. Edits to the sheet show up on the site within a few minutes (Google refreshes published sheets on its own schedule).
 3. The sheet needs a header row with **Length**, **Width** and **Height** columns (names like "Inside L" or "Length (in)" work too), or one **Dimensions** column like `12 x 10 x 8`. A column called Box, Name, Item or SKU is used as the box name. Every other column (quantity, location, cost...) is shown on the result cards. Fractions like `12 1/2` are fine.
 Until the link is set the page shows a sample list. Anyone can also paste a different link or open a CSV file under "Use a different list" on the page.
-- `supabase/schema.sql`: tables, sign-up trigger, and access rules
+- `supabase/schema.sql`: tables, sign-up trigger, roles and access rules
+- `supabase/roles.sql`: adds the Packaging engineer role and role changes to a database set up before roles existed

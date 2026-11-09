@@ -17,7 +17,7 @@ create table if not exists public.profiles (
   username extensions.citext not null unique check (char_length(username) between 3 and 40),
   email extensions.citext not null,
   company_id uuid not null references public.companies(id) on delete cascade,
-  role text not null default 'member' check (role in ('member','company_admin')),
+  role text not null default 'member' check (role in ('member','engineer','company_admin')),
   created_at timestamptz not null default now()
 );
 
@@ -157,6 +157,29 @@ create policy "see own admin row" on public.app_admins for select to authenticat
 revoke execute on function public.handle_new_user() from public, anon, authenticated;
 revoke execute on function public.set_company_status(uuid, text) from public, anon;
 grant execute on function public.set_company_status(uuid, text) to authenticated;
+-- Admins set roles: User (member), Packaging engineer (engineer), Admin (company_admin).
+create or replace function public.set_user_role(uid uuid, new_role text) returns void
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  target_company uuid;
+begin
+  if new_role not in ('member','engineer','company_admin') then raise exception 'Unknown role.'; end if;
+  select company_id into target_company from public.profiles where id = uid;
+  if target_company is null then raise exception 'That user wasn''t found.'; end if;
+  if not public.is_app_admin() then
+    if not exists (select 1 from public.profiles
+                   where id = auth.uid() and role = 'company_admin'
+                     and company_id = target_company and company_id = public.my_company_id()) then
+      raise exception 'Only an admin of this company can change roles.';
+    end if;
+    if uid = auth.uid() then raise exception 'You can''t change your own role.'; end if;
+  end if;
+  update public.profiles set role = new_role where id = uid;
+end $$;
+
+revoke execute on function public.set_user_role(uuid, text) from public, anon;
+grant execute on function public.set_user_role(uuid, text) to authenticated;
+
 revoke execute on function public.my_company_id() from public, anon;
 revoke execute on function public.is_app_admin() from public, anon;
 grant execute on function public.my_company_id() to authenticated;
