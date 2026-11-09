@@ -200,13 +200,15 @@ th.opt{text-align:right}
     <div class="row r2"><label for="userSearch">Search users<input id="userSearch" type="search" placeholder="Name, email or company"></label>
       <label for="userCompany">Company<select id="userCompany"><option value="">All companies</option></select></label></div>
     <p id="userCount" class="hint"></p>
+    <p class="hint">Admins manage roles and see every page. Packaging engineers also see Compare box sizes and Box finder. Users see the Shipment builder only.</p>
+    <p id="roleMsg" class="hint" role="status" hidden></p>
     <div class="tablewrap"><table><thead><tr><th>Username</th><th>Email</th><th>Company</th><th>Role</th><th>Joined</th></tr></thead><tbody id="userRows"></tbody></table></div>
   </div>
 </section>
-<nav class="tabs pagenav" aria-label="Pages">
+<nav class="tabs pagenav" aria-label="Pages" hidden>
   <button type="button" data-page="builder" aria-pressed="true">Shipment builder</button>
-  <button type="button" data-page="compare" aria-pressed="false">Compare box sizes</button>
-  <button type="button" data-page="boxes" aria-pressed="false">Box finder</button>
+  <button type="button" data-page="compare" aria-pressed="false" hidden>Compare box sizes</button>
+  <button type="button" data-page="boxes" aria-pressed="false" hidden>Box finder</button>
 </nav>
 <div id="builderPage" class="col" style="gap:20px">
 <header>
@@ -1026,7 +1028,7 @@ async function route(){
   if(routing)return routing;
   routing=(async()=>{
     const {data:{session}}=await sb.auth.getSession();
-    if(!session){PROFILE=null;show("auth");return}
+    if(!session){PROFILE=null;IS_ADMIN=false;applyRole();show("auth");return}
     const {data:prof,error}=await sb.from("profiles").select("id,username,email,role,company_id,companies(name,status,email_domain)").eq("id",session.user.id).maybeSingle();
     if(error||!prof){show("auth");authMsg("We couldn't find your account details. Try signing in again, or create an account.","err");await sb.auth.signOut();return}
     PROFILE=prof;
@@ -1039,8 +1041,8 @@ async function route(){
         :`Your email is verified. ${c.name} (${c.email_domain}) is waiting for approval. You can use the app as soon as it's approved.`;
       show("pending");return}
     $("acctUser").textContent=prof.username;$("acctCompany").textContent=c.name+(c.status!=="approved"?" (not yet approved)":"");
-    $("adminBtn").hidden=!IS_ADMIN;
-    show("app");initLib();
+    $("adminBtn").hidden=!canManage();
+    show("app");initLib();applyRole();
   })();
   try{await routing}finally{routing=null}
 }
@@ -1061,10 +1063,25 @@ function renderUsers(){
   $("userCount").textContent=`${list.length} of ${USERS.length} user${USERS.length===1?"":"s"}`;
   $("userRows").innerHTML=list.length?list.map(u=>`<tr><td>${esc(u.username)}</td><td class="mono">${esc(u.email)}</td>
     <td>${esc(u.companies?u.companies.name:"")} ${u.companies&&u.companies.status!=="approved"?`<span class="pill${u.companies.status==="rejected"?" warn":" mix"}">${u.companies.status}</span>`:""}</td>
-    <td>${u.role==="company_admin"?"Company admin":"Member"}</td><td class="mono">${new Date(u.created_at).toLocaleDateString()}</td></tr>`).join("")
+    <td>${roleCell(u)}</td><td class="mono">${new Date(u.created_at).toLocaleDateString()}</td></tr>`).join("")
     :`<tr><td colspan="5" class="hint">No users match.</td></tr>`;
 }
+/* Roles: User (member) sees the Shipment builder; Packaging engineer (engineer) also sees
+   Compare box sizes and Box finder; Admin (company_admin) sees everything and sets roles.
+   Site admins (app_admins) can do everything for every company. */
+const ROLES=[["member","User"],["engineer","Packaging engineer"],["company_admin","Admin"]];
+const roleName=r=>(ROLES.find(x=>x[0]===r)||[,"User"])[1];
+function canManage(){return IS_ADMIN||(!!PROFILE&&PROFILE.role==="company_admin")}
+function canBoxTools(){return IS_ADMIN||(!!PROFILE&&(PROFILE.role==="company_admin"||PROFILE.role==="engineer"))}
+function roleCell(u){
+  const editable=canManage()&&u.id!==PROFILE.id&&(IS_ADMIN||u.company_id===PROFILE.company_id);
+  if(!editable)return esc(roleName(u.role));
+  return `<select data-role-uid="${u.id}" aria-label="Role for ${esc(u.username)}">${ROLES.map(([v,l])=>`<option value="${v}"${v===u.role?" selected":""}>${l}</option>`).join("")}</select>`;
+}
+function roleMsg(t,kind){const m=$("roleMsg");m.textContent=t||"";m.hidden=!t;m.className=kind?"msg "+kind:"hint"}
 function adminTab(t){$("admTabCo").setAttribute("aria-pressed",t==="co");$("admTabUsers").setAttribute("aria-pressed",t==="users");
+  if(!IS_ADMIN)t="users";
+  $("admTabCo").hidden=!IS_ADMIN;
   $("companyList").hidden=t!=="co";$("userPane").hidden=t!=="users";if(t==="users")loadUsers();else loadCompanies()}
 async function loadCompanies(){
   const {data,error}=await sb.from("companies").select("id,name,email_domain,status,created_at").order("created_at",{ascending:false});
@@ -1119,10 +1136,16 @@ if(!sb){
     if(error)return authMsg("Couldn't save the password: "+error.message,"err");
     authTab("in");authMsg("Password updated. You're signed in.","ok");route();
   });
-  $("signOutBtn").addEventListener("click",async()=>{await sb.auth.signOut();PROFILE=null;LIB=[];renderLib();show("auth");authTab("in")});
+  $("signOutBtn").addEventListener("click",async()=>{await sb.auth.signOut();PROFILE=null;IS_ADMIN=false;LIB=[];renderLib();applyRole();$("adminPanel").hidden=true;show("auth");authTab("in")});
   $("pendingOut").addEventListener("click",async()=>{await sb.auth.signOut();show("auth");authTab("in")});
   $("pendingCheck").addEventListener("click",()=>route());
-  $("adminBtn").addEventListener("click",()=>{$("adminPanel").hidden=false;adminTab("co")});
+  $("adminBtn").addEventListener("click",()=>{$("adminPanel").hidden=false;roleMsg("");adminTab(IS_ADMIN?"co":"users")});
+  $("userRows").addEventListener("change",async e=>{const uid=e.target.dataset.roleUid;if(!uid)return;
+    const u=USERS.find(x=>x.id===uid),nr=e.target.value;e.target.disabled=true;
+    const {error}=await sb.rpc("set_user_role",{uid,new_role:nr});
+    if(error){roleMsg("Couldn't change the role: "+error.message,"err");e.target.value=u?u.role:nr}
+    else{if(u)u.role=nr;roleMsg(`${u?u.username:"User"} is now ${roleName(nr)==="Admin"?"an":"a"} ${roleName(nr)}.`,"ok")}
+    e.target.disabled=false});
   $("admTabCo").addEventListener("click",()=>adminTab("co"));
   $("admTabUsers").addEventListener("click",()=>adminTab("users"));
   $("userSearch").addEventListener("input",renderUsers);
@@ -1689,8 +1712,22 @@ $("bfFile").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)
 let bfStarted=false;
 
 /* ---------- PAGES ---------- */
+const PAGE_OK={builder:()=>true,compare:canBoxTools,boxes:canBoxTools};
+function applyRole(){
+  const ok=canBoxTools();
+  document.querySelectorAll(".pagenav button").forEach(b=>b.hidden=!PAGE_OK[b.dataset.page]());
+  document.querySelector(".pagenav").hidden=!ok;
+  showPage(location.hash.slice(1));
+}
 function showPage(pg){
-  if(pg!=="compare"&&pg!=="boxes")pg="builder";
+  if(!PAGE_OK[pg])pg="builder";
+  if(!PAGE_OK[pg]()){
+    // Not allowed for this role (or still signing in): show the builder but keep the link,
+    // so #boxes still opens once an engineer's account has loaded.
+    $("builderPage").hidden=false;$("comparePage").hidden=true;$("boxesPage").hidden=true;
+    document.querySelectorAll(".pagenav button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.page==="builder"));
+    if(PROFILE&&location.hash)history.replaceState(null,"",location.pathname+location.search);
+    return}
   $("builderPage").hidden=pg!=="builder";$("comparePage").hidden=pg!=="compare";$("boxesPage").hidden=pg!=="boxes";
   if(pg==="boxes"&&!bfStarted){bfStarted=true;bfInit()}
   document.querySelectorAll(".pagenav button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.page===pg));
