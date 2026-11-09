@@ -26,7 +26,7 @@ Pallet and truck load planner with company accounts. It's a static site (`index.
 
 ## Files
 - `index.html`: the app (planner, box size comparison, sign-in, sign-up, approvals). The **Compare box sizes** page (`index.html#compare`) puts two or more box sizes for the same item on one pallet and ranks them by units per pallet and cube utilization. Its **Download PDF report** button saves the comparison as a PDF.
-- The **Box finder** page (`index.html#boxes`) takes a product's L × W × H and lists the 3 to 5 smallest boxes from the company box inventory that it fits inside, in any orientation (or with the height kept up). Optional extra room per side allows for padding.
+- The **Box finder** page (`index.html#boxes`) takes a product's L × W × H and lists the 3 to 5 smallest boxes from the company box inventory that it fits inside, in any orientation (or with the height kept up). Optional extra room per side allows for padding. It also suggests the closest whole-inch size to look up on Uline. A **By cubic volume** search lists the smallest boxes with at least a given inside volume (cu ft or cu in).
 - `config.js`: Supabase URL and anon key, plus `boxInventoryCsv`, the box inventory link
 
 ## Box inventory (Google Sheet)
