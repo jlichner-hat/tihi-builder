@@ -205,6 +205,7 @@ th.opt{text-align:right}
 <nav class="tabs pagenav" aria-label="Pages">
   <button type="button" data-page="builder" aria-pressed="true">Shipment builder</button>
   <button type="button" data-page="compare" aria-pressed="false">Compare box sizes</button>
+  <button type="button" data-page="boxes" aria-pressed="false">Box finder</button>
 </nav>
 <div id="builderPage" class="col" style="gap:20px">
 <header>
@@ -330,6 +331,52 @@ th.opt{text-align:right}
     </section>
   </div>
   <div class="col" id="cmpResults" aria-live="polite"></div>
+</div>
+</div>
+
+<!-- BOX FINDER -->
+<div id="boxesPage" class="col" style="gap:20px" hidden>
+<header>
+  <div>
+    <h1>Box finder</h1>
+    <p class="sub">Enter a product's size and find the closest boxes in stock that it fits inside, smallest first. The product can be turned any way unless you keep a side up.</p>
+  </div>
+  <div class="hdr-actions"><button id="bfReload" type="button">Reload inventory</button></div>
+</header>
+<div class="grid">
+  <div class="col">
+    <section class="panel" aria-labelledby="bfProdH">
+      <div class="panel-head"><div><div class="step">Step 1</div><h2 id="bfProdH">Product size</h2></div></div>
+      <form id="bfForm" class="col" style="gap:12px" novalidate>
+        <div class="row r3">
+          <label for="bfL">Length in<input id="bfL" type="text" inputmode="decimal" autocomplete="off" placeholder="12"></label>
+          <label for="bfW">Width in<input id="bfW" type="text" inputmode="decimal" autocomplete="off" placeholder="9 1/2"></label>
+          <label for="bfH">Height in<input id="bfH" type="text" inputmode="decimal" autocomplete="off" placeholder="6"></label>
+        </div>
+        <p class="hint">Inches. Decimals or fractions both work, like 9.5 or 9 1/2.</p>
+        <div class="row r2">
+          <label for="bfPad">Extra room per side (in)<input id="bfPad" type="number" min="0" step="0.125" value="0"></label>
+          <label for="bfCount">Boxes to show<select id="bfCount"><option>3</option><option>4</option><option selected>5</option></select></label>
+        </div>
+        <p class="hint">Extra room adds space on every side for padding or dunnage. 0.25 in per side makes the box 0.5 in bigger each way.</p>
+        <label class="check" for="bfUp"><input id="bfUp" type="checkbox"> Keep height up (product can't be laid on its side)</label>
+        <button class="primary" type="submit">Find boxes</button>
+      </form>
+    </section>
+    <section class="panel" aria-labelledby="bfSrcH">
+      <div class="panel-head"><div><div class="step">Inventory</div><h2 id="bfSrcH">Box list</h2></div></div>
+      <p id="bfSrcMsg" class="hint" role="status">Loading box inventory...</p>
+      <details id="bfSrcMore"><summary class="hint" style="cursor:pointer">Use a different list</summary>
+        <div class="col" style="gap:8px;margin-top:8px">
+          <label for="bfUrl">Google Sheet CSV link<input id="bfUrl" type="url" autocomplete="off" placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv"></label>
+          <div class="hdr-actions"><button id="bfUrlLoad" type="button">Load link</button><button id="bfUrlClear" type="button" class="linkbtn">Use the site's list</button></div>
+          <label for="bfFile">Or open a CSV file<input id="bfFile" type="file" accept=".csv,text/csv"></label>
+          <p class="hint">In Google Sheets: File &gt; Share &gt; Publish to web, choose the box tab and "Comma-separated values (.csv)". A link saved here is kept in this browser only.</p>
+        </div>
+      </details>
+    </section>
+  </div>
+  <div class="col" id="bfResults" aria-live="polite"></div>
 </div>
 </div>
 </div>
@@ -1405,19 +1452,193 @@ $("cmpPdfBtn").addEventListener("click",async()=>{
   finally{btn.disabled=false;btn.textContent="Download PDF report"}
 });
 
+/* ---------- BOX FINDER ----------
+   Reads the box inventory from a published Google Sheet (CSV), then lists the smallest
+   boxes the product fits inside. Columns are matched by header name, so the sheet's
+   layout can change without code changes. */
+const BF_SAMPLE=`Box,Length,Width,Height,Notes
+S-4125,6,4,4,Sample list
+S-4126,6,6,6,Sample list
+S-4130,8,6,4,Sample list
+S-4134,8,8,8,Sample list
+S-4140,10,8,6,Sample list
+S-4144,10,10,10,Sample list
+S-4150,12,9,6,Sample list
+S-4152,12,10,8,Sample list
+S-4156,12,12,12,Sample list
+S-4160,14,10,6,Sample list
+S-4164,14,14,14,Sample list
+S-4170,16,12,8,Sample list
+S-4174,16,16,16,Sample list
+S-4180,18,12,12,Sample list
+S-4184,18,18,18,Sample list
+S-4190,20,14,10,Sample list
+S-4194,20,20,20,Sample list
+S-4200,24,18,12,Sample list
+S-4204,24,24,24,Sample list`;
+const BF_KEY="tihi.boxCsvUrl";
+const bf={rows:[],extra:[],source:"",nameCol:""};
+const lsGet=k=>{try{return localStorage.getItem(k)||""}catch(e){return ""}};
+const lsSet=(k,v)=>{try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}};
+
+function parseCsv(text){
+  const rows=[];let row=[],f="",q=false;
+  text=String(text).replace(/^﻿/,"");
+  for(let i=0;i<text.length;i++){const c=text[i];
+    if(q){if(c==='"'){if(text[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
+    else if(c==='"')q=true;
+    else if(c===","){row.push(f);f=""}
+    else if(c==="\n"||c==="\r"){if(c==="\r"&&text[i+1]==="\n")i++;row.push(f);rows.push(row);row=[];f=""}
+    else f+=c}
+  if(f!==""||row.length){row.push(f);rows.push(row)}
+  return rows.filter(r=>r.some(c=>c.trim()!==""));
+}
+// "12", "12.5", "12 1/2", "12-1/2", "1/2", '12"' -> inches
+function parseDim(v){
+  const s=String(v==null?"":v).trim().replace(/["”]|in(ches?)?\.?$/gi,"").trim();
+  if(!s)return NaN;
+  let m=s.match(/^(\d+(?:\.\d+)?)\s*[- ]\s*(\d+)\s*\/\s*(\d+)$/);if(m)return +m[1]+m[2]/m[3];
+  m=s.match(/^(\d+)\s*\/\s*(\d+)$/);if(m)return m[1]/m[2];
+  m=s.match(/^\d*\.?\d+$/);return m?+s:NaN;
+}
+// "Inside L (in)" -> "l", "Interior Length" -> "length"
+const bfKey=h=>String(h).toLowerCase().replace(/\(.*?\)/g,"").replace(/[^a-z0-9]/g,"")
+  .replace(/^(inside|interior|internal|int|id|box)(?=[a-z])/,"").replace(/(inches|inch|in)$/,"")||String(h).toLowerCase();
+function bfColumns(head){
+  const k=head.map(bfKey),find=(...tests)=>{for(const t of tests){const i=k.findIndex(t);if(i>=0)return i}return -1};
+  const L=find(x=>x==="l"||x==="len"||x==="length",x=>x.startsWith("length"),x=>x.includes("length"));
+  const W=find(x=>x==="w"||x==="wid"||x==="width",x=>x.startsWith("width"),x=>x.includes("width"));
+  const H=find(x=>x==="h"||x==="d"||x==="ht"||x==="height"||x==="depth",x=>/^(height|depth)/.test(x),x=>x.includes("height")||x.includes("depth"));
+  const D=find(x=>x.includes("dimension")||x==="dims"||x==="size"||x.includes("boxsize"));
+  const N=find(x=>/^(box|boxname|name|item|itemno|itemnumber|itemnum|sku|part|partno|partnumber|model|boxid|id|code)$/.test(x),
+               x=>x.includes("name")||x.includes("sku")||x.includes("part")||x.includes("item"),x=>x.includes("desc"));
+  return {L,W,H,D,N};
+}
+function bfLoadCsv(text,source){
+  const rows=parseCsv(text);
+  if(rows.length<2)throw new Error("The list is empty.");
+  // header = first row with at least two non-numeric cells
+  let hi=rows.findIndex(r=>r.filter(c=>c.trim()&&isNaN(parseDim(c))).length>=2);if(hi<0)hi=0;
+  const head=rows[hi].map(h=>h.trim()),c=bfColumns(head);
+  const hasLWH=c.L>=0&&c.W>=0&&c.H>=0;
+  if(!hasLWH&&c.D<0)throw new Error("Couldn't find length, width and height columns. Name them Length, Width and Height (or one Dimensions column like 12 x 10 x 8).");
+  const used=new Set([c.L,c.W,c.H,c.D,c.N].filter(i=>i>=0));
+  const extra=head.map((h,i)=>({h,i})).filter(x=>x.h&&!used.has(x.i));
+  const out=[];
+  rows.slice(hi+1).forEach((r,n)=>{
+    let d;
+    if(hasLWH)d=[r[c.L],r[c.W],r[c.H]].map(parseDim);
+    else{const parts=String(r[c.D]||"").split(/\s*[x×X*]\s*/);d=parts.length===3?parts.map(parseDim):[NaN]}
+    if(d.length!==3||d.some(v=>!(v>0)))return;
+    const name=(c.N>=0?r[c.N]:"").trim()||`Row ${hi+n+2}`;
+    out.push({name,L:d[0],W:d[1],H:d[2],extra:extra.map(x=>(r[x.i]||"").trim())});
+  });
+  if(!out.length)throw new Error("No rows with three box dimensions were found.");
+  bf.rows=out;bf.extra=extra.map(x=>x.h);bf.source=source;bf.nameCol=c.N>=0?head[c.N]:"Box";
+  return out.length;
+}
+function bfSrc(t,cls){const m=$("bfSrcMsg");m.textContent=t;m.className="hint"+(cls?" msg "+cls:"")}
+async function bfFetch(url,label){
+  bfSrc("Loading box inventory...");
+  try{
+    const r=await fetch(url,{cache:"no-store"});
+    if(!r.ok)throw new Error("The sheet link answered "+r.status+".");
+    const t=await r.text();
+    if(/^\s*<(!doctype|html)/i.test(t))throw new Error("That link returns a web page, not CSV. Publish the sheet as Comma-separated values (.csv) and use that link.");
+    const n=bfLoadCsv(t,label);bfSrc(`${fmt(n)} boxes loaded from ${label}.`,"ok");
+  }catch(e){
+    bfLoadCsv(BF_SAMPLE,"the sample list");
+    bfSrc(`Couldn't read the box inventory (${(e&&e.message)||e}). Showing a sample list instead.`,"err");
+  }
+  bfRun();
+}
+function bfInit(){
+  const own=lsGet(BF_KEY),site=(window.TIHI_CONFIG||{}).boxInventoryCsv||"";
+  $("bfUrl").value=own;
+  if(own)return bfFetch(own,"your saved sheet link");
+  if(site)return bfFetch(site,"the company box inventory");
+  bfLoadCsv(BF_SAMPLE,"the sample list");
+  bfSrc("Showing a sample list. The company box inventory isn't connected yet.");
+  bfRun();
+}
+
+// Every way the product can sit in the box (6 turns, or 2 with height kept up).
+const bfTurns=up=>up?[[0,1,2],[1,0,2]]:[[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]];
+// How far the product overhangs the box in its best turn (0 or less means it fits).
+const bfShort=(p,b,up)=>Math.min(...bfTurns(up).map(t=>Math.max(p[t[0]]-b.L,p[t[1]]-b.W,p[t[2]]-b.H)));
+function bfFit(p,b,upright){
+  const bd=[b.L,b.W,b.H];
+  let best=null;
+  for(const t of bfTurns(upright)){
+    const q=[p[t[0]],p[t[1]],p[t[2]]];
+    const room=bd.map((v,i)=>v-q[i]);
+    if(room.some(v=>v<-1e-9))continue;
+    const worst=Math.max(...room);
+    if(!best||worst<best.worst)best={q,room,worst};
+  }
+  return best;
+}
+function bfRun(){
+  const box=$("bfResults");
+  const raw=[$("bfL").value,$("bfW").value,$("bfH").value],dims=raw.map(parseDim);
+  if(raw.every(v=>!String(v).trim())){
+    box.innerHTML=`<section class="panel"><div class="panel-head"><h2>Closest boxes</h2></div><p class="hint">Enter the product's length, width and height to see the closest boxes in stock.</p></section>`;return}
+  if(dims.some(v=>!(v>0))){box.innerHTML=`<div class="alert">Enter a length, width and height greater than zero.</div>`;return}
+  const pad=Math.max(0,num($("bfPad").value)),up=$("bfUp").checked,count=+$("bfCount").value||5;
+  const need=dims.map(v=>v+2*pad),pVol=dims[0]*dims[1]*dims[2];
+  const fits=[];
+  for(const b of bf.rows){const f=bfFit(need,b,up);if(f)fits.push({b,f,vol:b.L*b.W*b.H})}
+  fits.sort((a,c)=>a.vol-c.vol||a.f.worst-c.f.worst);
+  const top=fits.slice(0,count);
+  const prod=`${dims.map(bfN).join(" × ")} in`+(pad?` + ${bfN(pad)} in per side`:"");
+  let h=`<section class="panel"><div class="panel-head"><h2>Closest boxes</h2><span class="hint">${esc(prod)} · ${fmt(fits.length)} of ${fmt(bf.rows.length)} boxes fit</span></div>`;
+  if(!top.length){
+    // nothing fits: show the boxes that come nearest, so the user sees how far off they are
+    const near=bf.rows.map(b=>({b,short:bfShort(need,b,up)})).sort((a,c)=>a.short-c.short||a.b.L*a.b.W*a.b.H-c.b.L*c.b.W*c.b.H).slice(0,3);
+    h+=`<div class="alert">No box in the list is big enough${up?" with the height kept up":""}.</div>`;
+    if(near.length)h+=`<p class="hint">Nearest: ${near.map(x=>`${esc(x.b.name)} (${bfDims(x.b)}, short by ${bfN(x.short)} in)`).join("; ")}.</p>`;
+    box.innerHTML=h+`</section>`;return}
+  h+=`<div class="cards">`;
+  top.forEach((x,i)=>{
+    const empty=100*(1-pVol/x.vol);
+    h+=`<div class="card${i===0?" win":""}"><div class="panel-head"><h3>${esc(x.b.name)}</h3>${i===0?`<span class="pill mix">Best fit</span>`:`<span class="pill">#${i+1}</span>`}</div>
+      <div class="tihi">${bfDims(x.b)}<small>IN</small></div>
+      <dl class="kv"><dt>Product sits as</dt><dd>${x.f.q.map(v=>bfN(v-2*pad)).join(" × ")}</dd>
+      <dt>Extra room L / W / H</dt><dd>${x.f.room.map(bfN).join(" / ")} in</dd>
+      <dt>Empty space</dt><dd>${fmt(empty,0)}%</dd>
+      ${bf.extra.map((e,j)=>x.b.extra[j]?`<dt>${esc(e)}</dt><dd>${esc(x.b.extra[j])}</dd>`:"").join("")}</dl></div>`;
+  });
+  h+=`</div><p class="hint">Sorted smallest box first. Extra room is the space left over in each direction${pad?", after the padding you asked for":""}. Empty space is how much of the box the product doesn't fill.</p></section>`;
+  box.innerHTML=h;
+}
+const bfN=v=>Number(v).toLocaleString(undefined,{maximumFractionDigits:3});
+const bfDims=b=>[b.L,b.W,b.H].map(bfN).join(" × ");
+$("bfForm").addEventListener("submit",e=>{e.preventDefault();bfRun()});
+["bfL","bfW","bfH","bfPad"].forEach(id=>$(id).addEventListener("input",bfRun));
+["bfUp","bfCount"].forEach(id=>$(id).addEventListener("change",bfRun));
+$("bfReload").addEventListener("click",bfInit);
+$("bfUrlLoad").addEventListener("click",()=>{const u=$("bfUrl").value.trim();lsSet(BF_KEY,u);bfInit()});
+$("bfUrlClear").addEventListener("click",()=>{lsSet(BF_KEY,"");bfInit()});
+$("bfFile").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;
+  try{const n=bfLoadCsv(await f.text(),f.name);bfSrc(`${fmt(n)} boxes loaded from ${f.name}. Reload the page to go back to the shared list.`,"ok")}
+  catch(err){bfSrc(`Couldn't read ${f.name}: ${err.message}`,"err")}
+  bfRun()});
+let bfStarted=false;
+
 /* ---------- PAGES ---------- */
 function showPage(pg){
-  if(pg!=="compare")pg="builder";
-  $("builderPage").hidden=pg!=="builder";$("comparePage").hidden=pg!=="compare";
+  if(pg!=="compare"&&pg!=="boxes")pg="builder";
+  $("builderPage").hidden=pg!=="builder";$("comparePage").hidden=pg!=="compare";$("boxesPage").hidden=pg!=="boxes";
+  if(pg==="boxes"&&!bfStarted){bfStarted=true;bfInit()}
   document.querySelectorAll(".pagenav button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.page===pg));
-  const want=pg==="compare"?"#compare":"";
+  const want=pg==="builder"?"":"#"+pg;
   if(location.hash!==want)history.replaceState(null,"",location.pathname+location.search+want);
 }
 document.querySelector(".pagenav").addEventListener("click",e=>{const pg=e.target.dataset.page;if(pg){showPage(pg);window.scrollTo(0,0)}});
 window.addEventListener("hashchange",()=>showPage(location.hash.slice(1)));
 cmpRenderInputs();cmpRerender();showPage(location.hash.slice(1));
 
-window.__tihi={layerPattern,plan:()=>plan(),loadTruck:b=>loadTruck(b),state:()=>state,compare:()=>cmpCalc()};
+window.__tihi={layerPattern,plan:()=>plan(),loadTruck:b=>loadTruck(b),state:()=>state,compare:()=>cmpCalc(),boxFit:()=>bf};
 init();
 })();
 </script>
