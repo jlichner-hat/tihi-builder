@@ -9,7 +9,7 @@ Pallet and truck load planner with company accounts. It's a static site (`index.
 - A **site admin** (you) approves each new company from the **Approve companies** button. Until then, its users see a "waiting for approval" screen.
 - Saved items (name, L × W × H, weight) belong to one company. Database row level security makes other companies' items unreadable, even to someone calling the API directly.
 - **Roles** decide which pages someone sees. **User** (the default for new sign-ups): Shipment builder only. **Packaging engineer**: also Compare box sizes and Box finder. **Admin** (the company's first sign-up): every page, plus the **Admin** button, where they set the role of anyone in their company. Site admins can set anyone's role. Roles are changed through a database function that checks the caller is an admin, so people can't promote themselves.
-- Hiding pages is a convenience, not a lock on the data: the box inventory is a published Google Sheet, and anyone who has its link can open it.
+- The box inventory reaches the browser only through the `box-inventory` Supabase function, which checks the viewer's role first. The sheet's link is a Supabase secret, so it isn't in this repo or the page.
 - Users sign in with their email and password. Passwords are stored and hashed by Supabase Auth and never touch this site's tables.
 
 ## Setup
@@ -30,12 +30,18 @@ Pallet and truck load planner with company accounts. It's a static site (`index.
 ## Files
 - `index.html`: the app (planner, box size comparison, sign-in, sign-up, approvals). The **Compare box sizes** page (`index.html#compare`) puts two or more box sizes for the same item on one pallet and ranks them by units per pallet and cube utilization. Its **Download PDF report** button saves the comparison as a PDF.
 - The **Box finder** page (`index.html#boxes`) takes a product's L × W × H and lists the 3 to 5 smallest boxes from the company box inventory that it fits inside, in any orientation (or with the height kept up). Optional extra room per side allows for padding. It also suggests the closest whole-inch size to look up on Uline. A **By cubic volume** search lists the smallest boxes with at least a given inside volume (cu ft or cu in).
-- `config.js`: Supabase URL and anon key, plus `boxInventoryCsv`, the box inventory link
+- `config.js`: Supabase URL and anon key
 
 ## Box inventory (Google Sheet)
-1. In the Google Sheet, go to File > Share > Publish to web, choose the tab with the boxes and **Comma-separated values (.csv)**, and click Publish.
-2. Paste the link into `boxInventoryCsv` in `config.js`. Edits to the sheet show up on the site within a few minutes (Google refreshes published sheets on its own schedule).
-3. The sheet needs a header row with **Length**, **Width** and **Height** columns (names like "Inside L" or "Length (in)" work too), or one **Dimensions** column like `12 x 10 x 8`. A column called Box, Name, Item or SKU is used as the box name. Every other column (quantity, location, cost...) is shown on the result cards. Fractions like `12 1/2` are fine.
-Until the link is set the page shows a sample list. Anyone can also paste a different link or open a CSV file under "Use a different list" on the page.
+The Box finder reads the sheet through the `box-inventory` Supabase function (`supabase/functions/box-inventory/index.ts`). It only answers signed-in Packaging engineers, Admins and site admins, and it keeps the sheet's link secret.
+1. **Make the sheet's link private.** A published sheet can be read by anyone who has its link, and the old link was in this public repo. Make a copy of the sheet (File > Make a copy) and use the copy from now on. Then turn off publishing on the old sheet (File > Share > Publish to web > Stop publishing).
+2. In the copy, go to File > Share > Publish to web, choose the box tab and **Comma-separated values (.csv)**, and click Publish. Don't put this link anywhere public.
+3. **Deploy the function:** in Supabase, open Edge Functions > Deploy a new function > Via editor, name it `box-inventory`, paste `supabase/functions/box-inventory/index.ts`, and deploy (keep "Verify JWT" on). With the Supabase CLI: `supabase functions deploy box-inventory`.
+4. **Add the link:** Edge Functions > Secrets, add `BOX_INVENTORY_CSV_URL` with the link from step 2.
+
+Edits to the sheet show up within a few minutes (Google refreshes published sheets on its own schedule).
+The sheet needs a header row with **Length**, **Width** and **Height** columns (names like "Inside L" or "Length (in)" work too), or one **Dimensions** column like `12 x 10 x 8`. A column called Box, Name, Item or SKU is used as the box name. Every other column (quantity, location, cost...) is shown on the result cards. Fractions like `12 1/2` are fine.
+Under "Use a different list" on the page, someone can still paste a different link or open a CSV file of their own.
 - `supabase/schema.sql`: tables, sign-up trigger, roles and access rules
+- `supabase/functions/box-inventory/index.ts`: serves the box inventory to engineers and admins only
 - `supabase/roles.sql`: adds the Packaging engineer role and role changes to a database set up before roles existed

@@ -1585,8 +1585,13 @@ function bfSrc(t,cls){const m=$("bfSrcMsg");m.textContent=t;m.className="hint"+(
 async function bfFetch(url,label){
   bfSrc("Loading box inventory...");
   try{
-    const r=await fetch(url,{cache:"no-store"});
-    if(!r.ok)throw new Error("The sheet link answered "+r.status+".");
+    const r=url==="#site"
+      // The company list comes through the box-inventory Supabase function, which checks the
+      // viewer's role, so the sheet's own link is never sent to the browser.
+      ?await fetch(CFG.url+"/functions/v1/box-inventory",{cache:"no-store",headers:{
+          apikey:CFG.anonKey,Authorization:"Bearer "+(((await sb.auth.getSession()).data.session||{}).access_token||"")}})
+      :await fetch(url,{cache:"no-store"});
+    if(!r.ok)throw new Error(url==="#site"?(await r.text()).slice(0,200)||"error "+r.status:"The sheet link answered "+r.status+".");
     const t=await r.text();
     if(/^\s*<(!doctype|html)/i.test(t))throw new Error("That link returns a web page, not CSV. Publish the sheet as Comma-separated values (.csv) and use that link.");
     const n=bfLoadCsv(t,label);bfSrc(`${fmt(n)} boxes loaded from ${label}.`,"ok");
@@ -1597,10 +1602,10 @@ async function bfFetch(url,label){
   bfRun();
 }
 function bfInit(){
-  const own=lsGet(BF_KEY),site=(window.TIHI_CONFIG||{}).boxInventoryCsv||"";
+  const own=lsGet(BF_KEY);
   $("bfUrl").value=own;
   if(own)return bfFetch(own,"your saved sheet link");
-  if(site)return bfFetch(site,"the company box inventory");
+  if(sb&&PROFILE)return bfFetch("#site","the company box inventory");
   bfLoadCsv(BF_SAMPLE,"the sample list");
   bfSrc("Showing a sample list. The company box inventory isn't connected yet.");
   bfRun();

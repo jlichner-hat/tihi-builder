@@ -5,6 +5,5 @@ window.TIHI_CONFIG = {
   anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind0cml5bXdxaXVpaHF4a2RqZ2NvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM5NzQwODksImV4cCI6MjEwOTU1MDA4OX0.spyWSi1GE6MtMON8QkZpq8RtqBigst4GPn7XRtHiUbE"
 };
 
-// Box inventory for the Box finder page: the Google Sheet's "Publish to web" CSV link.
-// Leave empty to show a sample list. Currently: the "2025 Box List" tab.
-window.TIHI_CONFIG.boxInventoryCsv = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTphlguvWk0ySfPXgR-cbPTjpjltnBVUULFp_VOzhmnqOFIw_GkJs0akClrZrMs-FA58G7XPho-z27g/pub?gid=569861441&single=true&output=csv";
+// The Box finder's company box inventory comes from the box-inventory Supabase function
+// (supabase/functions/box-inventory). The sheet link is kept there as a secret, not here.
