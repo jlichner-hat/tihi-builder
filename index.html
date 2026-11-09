@@ -50,6 +50,7 @@ button{font:inherit;font-weight:600;font-size:.85rem;border-radius:4px;border:1p
 button:hover{border-color:var(--muted)}
 button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 a.btnlink{font-weight:600;font-size:.85rem;border-radius:4px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);padding:6px 12px;text-decoration:none}
+.card h3 a,.hint a{color:inherit;text-decoration:underline;text-decoration-color:var(--accent);text-decoration-thickness:2px;text-underline-offset:3px}
 button.x{padding:2px 8px;font-size:.8rem;color:var(--warn);background:transparent}
 .row{display:grid;gap:8px}
 .r2{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -1489,25 +1490,25 @@ $("cmpPdfBtn").addEventListener("click",async()=>{
    boxes the product fits inside. Columns are matched by header name, so the sheet's
    layout can change without code changes. */
 const BF_SAMPLE=`Box,Length,Width,Height,Notes
-S-4125,6,4,4,Sample list
-S-4126,6,6,6,Sample list
-S-4130,8,6,4,Sample list
-S-4134,8,8,8,Sample list
-S-4140,10,8,6,Sample list
-S-4144,10,10,10,Sample list
-S-4150,12,9,6,Sample list
-S-4152,12,10,8,Sample list
-S-4156,12,12,12,Sample list
-S-4160,14,10,6,Sample list
-S-4164,14,14,14,Sample list
-S-4170,16,12,8,Sample list
-S-4174,16,16,16,Sample list
-S-4180,18,12,12,Sample list
-S-4184,18,18,18,Sample list
-S-4190,20,14,10,Sample list
-S-4194,20,20,20,Sample list
-S-4200,24,18,12,Sample list
-S-4204,24,24,24,Sample list`;
+Sample 01,6,4,4,Sample list
+Sample 02,6,6,6,Sample list
+Sample 03,8,6,4,Sample list
+Sample 04,8,8,8,Sample list
+Sample 05,10,8,6,Sample list
+Sample 06,10,10,10,Sample list
+Sample 07,12,9,6,Sample list
+Sample 08,12,10,8,Sample list
+Sample 09,12,12,12,Sample list
+Sample 10,14,10,6,Sample list
+Sample 11,14,14,14,Sample list
+Sample 12,16,12,8,Sample list
+Sample 13,16,16,16,Sample list
+Sample 14,18,12,12,Sample list
+Sample 15,18,18,18,Sample list
+Sample 16,20,14,10,Sample list
+Sample 17,20,20,20,Sample list
+Sample 18,24,18,12,Sample list
+Sample 19,24,24,24,Sample list`;
 const BF_KEY="tihi.boxCsvUrl";
 const bf={rows:[],extra:[],source:"",nameCol:""};
 const lsGet=k=>{try{return localStorage.getItem(k)||""}catch(e){return ""}};
@@ -1547,7 +1548,8 @@ function bfColumns(head){
   return {L,W,H,D,N};
 }
 const BF_DIMKEY=/^(l|w|h|d|ht|len|wid|length|width|height|depth)$/;
-function bfLoadCsv(text,source){
+// Parses a box list into {rows, extra}; throws with a readable message when it can't.
+function bfParseCsv(text){
   const rows=parseCsv(text);
   if(rows.length<2)throw new Error("The list is empty.");
   // Header = first row whose cells name the box dimensions (skips title and group rows above it).
@@ -1564,7 +1566,8 @@ function bfLoadCsv(text,source){
   const dimCols=head.map((h,i)=>i).filter(i=>BF_DIMKEY.test(bfKey(head[i])));
   const outCols=dimCols.filter(i=>/outside|exterior|outer|\bod\b/.test(group[i])&&!/metric|mm|cm/.test(group[i]));
   const oc=outCols.length>=3?bfColumns(head.map((h,i)=>outCols.includes(i)?h:"")):null;
-  const used=new Set([c.L,c.W,c.H,c.D,c.N,...dimCols].filter(i=>i>=0));
+  const U=head.findIndex(h=>/^(link|url|productlink|weblink)$/.test(bfKey(h)));
+  const used=new Set([c.L,c.W,c.H,c.D,c.N,U,...dimCols].filter(i=>i>=0));
   const extra=head.map((h,i)=>({h,i})).filter(x=>x.h&&!used.has(x.i));
   const out=[];
   rows.slice(hi+1).forEach((r,n)=>{
@@ -1575,11 +1578,24 @@ function bfLoadCsv(text,source){
     const name=(c.N>=0?r[c.N]:"").trim()||`Row ${hi+n+2}`;
     const ex=extra.map(x=>(r[x.i]||"").trim());
     if(oc){const od=[r[oc.L],r[oc.W],r[oc.H]].map(parseDim);ex.push(od.every(v=>v>0)?od.map(bfN).join(" × ")+" in":"")}
-    out.push({name,L:d[0],W:d[1],H:d[2],extra:ex});
+    const url=U>=0&&/^https:\/\//i.test((r[U]||"").trim())?r[U].trim():"";
+    out.push({name,L:d[0],W:d[1],H:d[2],extra:ex,url});
   });
   if(!out.length)throw new Error("No rows with three box dimensions were found.");
-  bf.rows=out;bf.extra=extra.map(x=>x.h).concat(oc?["Outside size"]:[]);bf.source=source;bf.nameCol=c.N>=0?head[c.N]:"Box";
-  return out.length;
+  return {rows:out,extra:extra.map(x=>x.h).concat(oc?["Outside size"]:[])};
+}
+function bfLoadCsv(text,source){
+  const p=bfParseCsv(text);bf.rows=p.rows;bf.extra=p.extra;bf.source=source;
+  return p.rows.length;
+}
+// Uline's standard 200 lb test boxes (uline-boxes.csv in this repo), searched next to stock.
+const ul={rows:[],extra:[],state:"idle"};
+async function ulLoad(){
+  if(ul.state!=="idle")return;ul.state="loading";
+  try{const r=await fetch("uline-boxes.csv",{cache:"no-cache"});if(!r.ok)throw new Error(r.status);
+    const p=bfParseCsv(await r.text());ul.rows=p.rows;ul.extra=p.extra;ul.state="ok"}
+  catch(e){ul.state="failed"}
+  bfRun();
 }
 function bfSrc(t,cls){const m=$("bfSrcMsg");m.textContent=t;m.className="hint"+(cls?" msg "+cls:"")}
 async function bfFetch(url,label){
@@ -1602,6 +1618,7 @@ async function bfFetch(url,label){
   bfRun();
 }
 function bfInit(){
+  ulLoad();
   const own=lsGet(BF_KEY);
   $("bfUrl").value=own;
   if(own)return bfFetch(own,"your saved sheet link");
@@ -1631,11 +1648,31 @@ let bfMode="size";
 const BF_ULINE="https://www.uline.com/Cls_04/Boxes-Corrugated";
 function bfSetMode(m){bfMode=m;$("bfBySize").hidden=m!=="size";$("bfByVol").hidden=m!=="vol";
   document.querySelectorAll("#bfModes button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.mode===m));bfRun()}
-function bfCard(x,i,rows){
-  return `<div class="card${i===0?" win":""}"><div class="panel-head"><h3>${esc(x.b.name)}</h3>${i===0?`<span class="pill mix">Best fit</span>`:`<span class="pill">#${i+1}</span>`}</div>
+function bfCard(x,i,rows,src=bf,pill){
+  const nm=x.b.url?`<a href="${esc(x.b.url)}" target="_blank" rel="noopener">${esc(x.b.name)}</a>`:esc(x.b.name);
+  return `<div class="card${i===0?" win":""}"><div class="panel-head"><h3>${nm}</h3>${pill||(i===0?`<span class="pill mix">Best fit</span>`:`<span class="pill">#${i+1}</span>`)}</div>
       <div class="tihi">${bfDims(x.b)}<small>IN INSIDE</small></div>
       <dl class="kv">${rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join("")}
-      ${bf.extra.map((e,j)=>x.b.extra[j]?`<dt>${esc(e)}</dt><dd>${esc(x.b.extra[j])}</dd>`:"").join("")}</dl></div>`;
+      ${src.extra.map((e,j)=>x.b.extra[j]?`<dt>${esc(e)}</dt><dd>${esc(x.b.extra[j])}</dd>`:"").join("")}</dl></div>`;
+}
+// Closest Uline boxes for the product, compared with the best stock box.
+function bfUlineSection(need,up,best,pVol,pad,count){
+  if(ul.state==="idle"||ul.state==="loading")return `<section class="panel"><div class="panel-head"><h2>Uline boxes</h2></div><p class="hint">Loading the Uline size list...</p></section>`;
+  const fits=[];
+  for(const b of ul.rows){const f=bfFit(need,b,up);if(f)fits.push({b,f,vol:b.L*b.W*b.H})}
+  fits.sort((a,c)=>a.vol-c.vol||a.f.worst-c.f.worst);
+  if(!fits.length)return bfUlinePanel(need,up,best,pVol);
+  const top=fits.slice(0,count);
+  const tighter=best?top.filter(x=>x.vol<best.vol-1e-9).length:top.length;
+  let h=`<section class="panel"><div class="panel-head"><h2>Uline boxes</h2><span class="hint">${fmt(fits.length)} of ${fmt(ul.rows.length)} Uline sizes fit</span></div>`;
+  h+=`<p class="hint">${!best?"Nothing in stock fits. These are the closest Uline boxes.":tighter?`${tighter} of these ${tighter===1?"is":"are"} a tighter fit than ${esc(best.b.name)}, the best box in stock.`:`None of these is tighter than ${esc(best.b.name)}, the best box in stock.`}</p>`;
+  h+=`<div class="cards">`+top.map((x,i)=>bfCard(x,i,[
+    ["Product sits as",x.f.q.map(v=>bfN(v-2*pad)).join(" × ")],
+    ["Extra room L / W / H",`${x.f.room.map(bfN).join(" / ")} in`],
+    ["Empty space",`${fmt(100*(1-pVol/x.vol),0)}%`]],ul,
+    best&&x.vol<best.vol-1e-9?`<span class="pill mix">Tighter than stock</span>`:`<span class="pill">${i===0?"Closest":"#"+(i+1)}</span>`)).join("")+`</div>`;
+  h+=`<p class="hint">Part numbers link to Uline. The list covers ${fmt(ul.rows.length)} of Uline's standard 200 lb test boxes, inside dimensions. Check price and stock on their site, or <a href="${BF_ULINE}" target="_blank" rel="noopener">search all Uline sizes</a>.</p></section>`;
+  return h;
 }
 function bfRunVol(){
   const box=$("bfResults"),raw=$("bfVol").value,unit=$("bfVolU").value,count=+$("bfCount").value||5;
@@ -1689,13 +1726,13 @@ function bfRun(){
     const near=bf.rows.map(b=>({b,short:bfShort(need,b,up)})).sort((a,c)=>a.short-c.short||a.b.L*a.b.W*a.b.H-c.b.L*c.b.W*c.b.H).slice(0,3);
     h+=`<div class="alert">No box in the list is big enough${up?" with the height kept up":""}.</div>`;
     if(near.length)h+=`<p class="hint">Nearest: ${near.map(x=>`${esc(x.b.name)} (${bfDims(x.b)}, short by ${bfN(x.short)} in)`).join("; ")}.</p>`;
-    box.innerHTML=h+`</section>`+bfUlinePanel(need,up,null,pVol);return}
+    box.innerHTML=h+`</section>`+bfUlineSection(need,up,null,pVol,pad,count);return}
   h+=`<div class="cards">`+top.map((x,i)=>bfCard(x,i,[
     ["Product sits as",x.f.q.map(v=>bfN(v-2*pad)).join(" × ")],
     ["Extra room L / W / H",`${x.f.room.map(bfN).join(" / ")} in`],
     ["Empty space",`${fmt(100*(1-pVol/x.vol),0)}%`]])).join("")+`</div>`;
   h+=`<p class="hint">Sorted smallest box first. Extra room is the space left over in each direction${pad?", after the padding you asked for":""}. Empty space is how much of the box the product doesn't fill.</p></section>`;
-  box.innerHTML=h+bfUlinePanel(need,up,top[0],pVol);
+  box.innerHTML=h+bfUlineSection(need,up,top[0],pVol,pad,count);
 }
 const bfN=v=>Number(v).toLocaleString(undefined,{maximumFractionDigits:3});
 const bfDims=b=>[b.L,b.W,b.H].map(bfN).join(" × ");
