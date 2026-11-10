@@ -2065,13 +2065,13 @@ html,body{margin:0;background:#e4e8ec;color:#000;font-family:"IBM Plex Sans",Ari
 #msg{width:100%;text-align:center;font-size:13px;color:#000;min-height:1em;margin:0}
 .wrap{display:flex;justify-content:center;padding:0 16px 24px}
 #label{width:4in;height:6in;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.18);padding:.16in;overflow:hidden;display:flex;flex-direction:column;font-size:var(--fs,10px)}
-.hd{display:flex;align-items:center;gap:.1in;border-bottom:2px solid #1d232b;padding-bottom:.06in}
-.hd img{height:.36in;width:auto}
-.hd .t{flex:1;min-width:0;text-align:right}
-.hd h1{font:700 1.9em/1 "Barlow Condensed","Arial Narrow",Arial,sans-serif;text-transform:uppercase;letter-spacing:.02em;margin:0;white-space:nowrap}
-.desk{font-size:.85em;font-style:italic;color:#000}
+.hd{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.08in;border-bottom:2px solid #1d232b;padding-bottom:.06in}
+.hd img{height:.36in;width:auto;justify-self:start}
+.hd .t{text-align:right;justify-self:end;white-space:nowrap;line-height:1.25}
+.hd h1{text-align:center;font:700 1.9em/1 "Barlow Condensed","Arial Narrow",Arial,sans-serif;text-transform:uppercase;letter-spacing:.02em;margin:0;white-space:nowrap}
+.desk{font-size:.74em;font-style:italic;color:#000}
 .desk b{font-style:normal;color:#000}
-.hd .d{font-size:.8em;color:#000}
+.hd .d{font-size:.72em;color:#000}
 .tape{height:.09in;margin:0 -.16in;background:repeating-linear-gradient(-45deg,#f2b705 0 .08in,#1d232b .08in .16in)}
 .req{margin:.08in 0 .04in;padding:.06in .08in;border:1.5px solid #1d232b;border-radius:3px}
 .req i{display:block;font-style:normal;font-size:.75em;text-transform:uppercase;letter-spacing:.06em;color:#000}
@@ -2097,7 +2097,7 @@ h2 small{font:400 .7em "IBM Plex Sans",Arial,sans-serif;text-transform:none;lett
   <div class="req"><i>Requested size</i><b>${e(r.search)}</b><div class="c">${fmt(r.fitCount)} of ${fmt(r.total)} boxes in stock fit</div></div>
   ${r.note?`<p class="note">${e(r.note)}</p>`:""}
   ${list(r.stock,"Closest boxes in stock","smallest first")}
-  ${list(r.uline,"Uline boxes","inside dims")}
+  ${list(r.uline,"Uline boxes","inside dims · not set up in SyteLine")}
 </div></div>
 <script>
 (function(){
