@@ -239,8 +239,9 @@ th.opt{text-align:right}
           <label for="libSel">Saved items<select id="libSel" disabled><option>Loading saved items...</option></select></label>
           <button id="libAdd" type="button" disabled>Add to list</button>
         </div>
-        <details id="libManage"><summary>Manage saved items</summary><div id="libList" class="col"></div></details>
+        <details id="libManage" hidden><summary>Manage saved items</summary><div id="libList" class="col"></div></details>
         <p id="libMsg" class="hint" role="status">Click Save on any item to keep its size and weight for your company. Typing a saved name fills in the rest.</p>
+        <div id="libHelp" class="lib-row" hidden><span class="hint">Need a saved item changed or removed?</span><button id="contactAdmin" type="button">Contact admin</button></div>
       </div>
       <div id="pkgList" class="col"></div>
     </section>
@@ -663,7 +664,7 @@ function renderPkgs(){
    <div class="item" data-i="${i}">
      <div class="item-head"><span class="swatch" style="background:${color(i)}"></span>
        <input id="pk-name-${i}" data-f="name" list="libNames" autocomplete="off" value="${esc(p.name)}" aria-label="Item ${i+1} name">
-       <button type="button" class="save" data-save="${i}"${LIBDB&&LIBW?"":" disabled"} title="Save this package's size and weight">Save</button></div>
+       <button type="button" class="save" data-save="${i}"${LIBDB?"":" disabled"} title="Save this package's size and weight">Save</button></div>
      <div class="row r4">
        <label for="pk-L-${i}">L in<input id="pk-L-${i}" data-f="L" type="number" min="0" step="0.25" value="${p.L}"></label>
        <label for="pk-W-${i}">W in<input id="pk-W-${i}" data-f="W" type="number" min="0" step="0.25" value="${p.W}"></label>
@@ -1082,10 +1083,12 @@ function renderLib(){
   if(LIB.some(it=>it.id===keep))sel.value=keep;
   $("libNames").innerHTML=LIB.map(it=>`<option value="${esc(it.name)}"></option>`).join("");
   sel.disabled=!LIB.length;$("libAdd").disabled=!LIB.length;
+  LIBW=canBoxTools();$("libManage").hidden=!PROFILE||!LIBW;
+  $("libHelp").hidden=!PROFILE||IS_ADMIN||PROFILE.role==="company_admin";
   $("libList").innerHTML=LIB.length?LIB.map(it=>`<div class="lib-item"><span>${esc(it.name)} <span class="mono">${it.L}×${it.W}×${it.H} in · ${it.wt} lb</span></span>
     ${LIBW?`<button type="button" class="x" data-libdel="${esc(it.id)}">${delArm===it.id?"Confirm remove":"Remove"}</button>`:""}</div>`).join("")
     :`<p class="hint">Nothing saved yet.</p>`;
-  document.querySelectorAll("#pkgList button.save").forEach(b=>b.disabled=!(LIBDB&&LIBW));
+  document.querySelectorAll("#pkgList button.save").forEach(b=>b.disabled=!LIBDB);
 }
 const CFG=window.TIHI_CONFIG||{};
 const sb=(window.supabase&&CFG.url&&CFG.anonKey)?window.supabase.createClient(CFG.url,CFG.anonKey):null;
@@ -1097,12 +1100,13 @@ async function loadLib(){
   LIB=data.map(toItem);renderLib();
 }
 function initLib(){
-  LIBDB=sb;LIBW=true;
+  LIBDB=sb;
   if(!libStarted){libStarted=true;window.addEventListener("focus",()=>{if(PROFILE)loadLib()})}
   loadLib();
 }
 const libApi={
   async save(name,p){const ex=LIB.find(it=>it.name.trim().toLowerCase()===name.toLowerCase());
+    if(ex&&!canBoxTools()){const e=new Error(`${name} is already saved. Only a Packaging engineer or Admin can change it. Use Contact admin, or save it under a new name.`);e.locked=true;throw e}
     const row={name,length_in:p.L,width_in:p.W,height_in:p.H,weight_lb:p.wt||0,updated_by:PROFILE.id,updated_at:new Date().toISOString()};
     const q=ex?sb.from("items").update(row).eq("id",ex.id):sb.from("items").insert({...row,company_id:PROFILE.company_id});
     const {error}=await q;if(error)throw error;await loadLib();return !!ex},
@@ -1114,8 +1118,8 @@ $("pkgList").addEventListener("click",async e=>{
   if(!(p.L>0&&p.W>0&&p.H>0)){libMsg("Enter L, W and H before saving "+name+".");return}
   e.target.disabled=true;
   try{const existed=await libApi.save(name,p);libMsg((existed?"Updated ":"Saved ")+name+" for "+(PROFILE.companies?PROFILE.companies.name:"your company")+".")}
-  catch(err){libMsg("Couldn't save "+name+": "+(err.message||"try again in a moment."))}
-  finally{e.target.disabled=!(LIBDB&&LIBW)}
+  catch(err){libMsg(err.locked?err.message:"Couldn't save "+name+": "+(err.message||"try again in a moment."))}
+  finally{e.target.disabled=!LIBDB}
 });
 $("libAdd").addEventListener("click",()=>{
   const it=LIB.find(x=>x.id===$("libSel").value);if(!it)return;
@@ -1125,10 +1129,20 @@ $("libAdd").addEventListener("click",()=>{
   const q=$("pk-qty-"+(state.packages.length-1));if(q){q.focus();q.select()}
 });
 $("libList").addEventListener("click",async e=>{
-  const id=e.target.dataset.libdel;if(!id||!LIBDB)return;
+  const id=e.target.dataset.libdel;if(!id||!LIBDB||!canBoxTools())return;
   if(delArm!==id){delArm=id;renderLib();return}
   delArm=null;
   try{await libApi.remove(id);libMsg("Removed.")}catch(err){libMsg("Couldn't remove that item.")}
+});
+$("contactAdmin").addEventListener("click",async()=>{
+  if(!sb||!PROFILE)return;
+  const {data,error}=await sb.from("profiles").select("email").eq("role","company_admin").eq("company_id",PROFILE.company_id);
+  const to=(data||[]).map(r=>r.email).filter(Boolean).filter(m=>m!==PROFILE.email);
+  if(error||!to.length){libMsg("No Admin is set up for your company yet. Ask your manager who looks after Ti:Hi Builder.");return}
+  const co=PROFILE.companies?PROFILE.companies.name:"our company";
+  const body=`Hi,\n\nI need help with Ti:Hi Shipment Builder saved items for ${co}.\n\nItem name(s):\nWhat to change or remove:\n\nThanks,\n${PROFILE.username||""}`;
+  location.href="mailto:"+to.map(encodeURIComponent).join(",")+"?subject="+encodeURIComponent("Ti:Hi Builder: help with saved items")+"&body="+encodeURIComponent(body);
+  libMsg("Opening an email to your Admin"+(to.length>1?"s":"")+": "+to.join(", "));
 });
 
 /* ---------- ACCOUNTS ---------- */
@@ -2181,6 +2195,7 @@ $("bfLabel").addEventListener("click",()=>{
 const PAGE_OK={builder:()=>true,compare:canBoxTools,ship:canBoxTools,boxes:canBoxTools};
 function applyRole(){
   const ok=canBoxTools();
+  renderLib();
   document.querySelectorAll(".pagenav button").forEach(b=>b.hidden=!PAGE_OK[b.dataset.page]());
   document.querySelector(".pagenav").hidden=!ok;
   showPage(location.hash.slice(1));

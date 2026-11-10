@@ -20,6 +20,7 @@ Pallet and truck load planner with company accounts. It's a static site (`index.
 4. **Keys:** `config.js` already has this project's URL and public anon key. The anon key is meant to be public, and the access rules protect the data.
 5. **Hosting (GitHub Pages):** push this folder to the repo, then in GitHub go to Settings > Pages and choose "Deploy from a branch", `main`, `/ (root)`.
 6. **Roles on an existing database:** if the database was set up before roles were added, run `supabase/roles.sql` once in the SQL Editor.
+7. **Saved item permissions on an existing database:** run `supabase/saved-items-roles.sql` once in the SQL Editor so only Packaging engineers and Admins can change or delete saved items. Users can still add new ones, and the **Contact admin** button under Saved items emails their company's Admins.
 7. **Make yourself site admin:** sign up on the site and verify your email. Then run this in the SQL editor:
    ```sql
    insert into public.app_admins(user_id)
@@ -44,4 +45,5 @@ The sheet needs a header row with **Length**, **Width** and **Height** columns (
 Under "Use a different list" on the page, someone can still paste a different link or open a CSV file of their own.
 - `supabase/schema.sql`: tables, sign-up trigger, roles and access rules
 - `supabase/functions/box-inventory/index.ts`: serves the box inventory to engineers and admins only
+- `supabase/saved-items-roles.sql`: limits changing and deleting saved items to Packaging engineers and Admins, for a database set up before that rule
 - `supabase/roles.sql`: adds the Packaging engineer role and role changes to a database set up before roles existed
