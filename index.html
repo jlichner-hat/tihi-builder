@@ -2067,10 +2067,9 @@ html,body{margin:0;background:#e4e8ec;color:#000;font-family:"IBM Plex Sans",Ari
 #label{width:4in;height:6in;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.18);padding:.16in;overflow:hidden;display:flex;flex-direction:column;font-size:var(--fs,10px)}
 .hd{display:flex;align-items:center;gap:.1in;border-bottom:2px solid #1d232b;padding-bottom:.06in}
 .hd img{height:.36in;width:auto}
-.hd .t{flex:1;min-width:0}
+.hd .t{flex:1;min-width:0;text-align:right}
 .hd h1{font:700 1.9em/1 "Barlow Condensed","Arial Narrow",Arial,sans-serif;text-transform:uppercase;letter-spacing:.02em;margin:0;white-space:nowrap}
-.tl{display:flex;align-items:baseline;gap:0 .07in;flex-wrap:wrap}
-.desk{font-size:.75em;font-style:italic;color:#000}
+.desk{font-size:.85em;font-style:italic;color:#000}
 .desk b{font-style:normal;color:#000}
 .hd .d{font-size:.8em;color:#000}
 .tape{height:.09in;margin:0 -.16in;background:repeating-linear-gradient(-45deg,#f2b705 0 .08in,#1d232b .08in .16in)}
@@ -2092,7 +2091,8 @@ h2 small{font:400 .7em "IBM Plex Sans",Arial,sans-serif;text-transform:none;lett
 </style></head><body>
 <div class="bar"><button class="primary" id="print" type="button">Print</button><button id="copy" type="button">Copy image</button><button id="close" type="button">Close</button><p id="msg" role="status"></p></div>
 <div class="wrap"><div id="label">
-  <div class="hd"><img src="${logo}" alt="HAT"><div class="t"><div class="tl"><h1>Box Finder</h1>${who?`<span class="desk">From the desk of <b>${e(who)}</b></span>`:""}</div><div class="d">${e(when)}</div></div></div>
+  <div class="hd"><img src="${logo}" alt="HAT"><h1>Box Finder</h1>
+    <div class="t">${who?`<div class="desk">From the desk of <b>${e(who)}</b></div>`:""}<div class="d">${e(when)}</div></div></div>
   <div class="tape"></div>
   <div class="req"><i>Requested size</i><b>${e(r.search)}</b><div class="c">${fmt(r.fitCount)} of ${fmt(r.total)} boxes in stock fit</div></div>
   ${r.note?`<p class="note">${e(r.note)}</p>`:""}
