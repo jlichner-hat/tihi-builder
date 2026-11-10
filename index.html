@@ -382,7 +382,9 @@ th.opt{text-align:right}
     <h1>Box finder</h1>
     <p class="sub">Enter a product's size, or the cubic volume you need, and find the closest boxes in stock, smallest first. In a size search the product can be turned any way unless you keep a side up.</p>
   </div>
-  <div class="hdr-actions"><button id="bfReload" type="button">Reload inventory</button></div>
+  <div class="hdr-actions"><button id="bfReload" type="button">Reload inventory</button>
+    <button id="bfLabel" class="primary" type="button">Open 4 × 6 report</button></div>
+  <p id="bfLabelMsg" class="hint" role="status" hidden></p>
 </header>
 <div class="grid">
   <div class="col">
@@ -1935,8 +1937,10 @@ function bfUlineSection(need,up,best,pVol,pad,count){
   const fits=[];
   for(const b of ul.rows){const f=bfFit(need,b,up);if(f)fits.push({b,f,vol:b.L*b.W*b.H})}
   fits.sort((a,c)=>a.vol-c.vol||a.f.worst-c.f.worst);
-  if(!fits.length)return bfUlinePanel(need,up,best,pVol);
+  if(!fits.length){bfLast.uline=[];return bfUlinePanel(need,up,best,pVol)}
   const top=fits.slice(0,count);
+  bfLast.uline=top.map(x=>({name:x.b.name,dims:bfDims(x.b),tight:!!(best&&x.vol<best.vol-1e-9),
+    rows:[["Sits as",x.f.q.map(v=>bfN(v-2*pad)).join(" × ")],["Room L/W/H",x.f.room.map(bfN).join(" / ")+" in"],["Empty",fmt(100*(1-pVol/x.vol),0)+"%"]]}));
   const tighter=best?top.filter(x=>x.vol<best.vol-1e-9).length:top.length;
   let h=`<section class="panel"><div class="panel-head"><h2>Uline boxes</h2><span class="hint">${fmt(fits.length)} of ${fmt(ul.rows.length)} Uline sizes fit</span></div>`;
   h+=`<p class="hint">${!best?"Nothing in stock fits. These are the closest Uline boxes.":tighter?`${tighter} of these ${tighter===1?"is":"are"} a tighter fit than ${esc(best.b.name)}, the best box in stock.`:`None of these is tighter than ${esc(best.b.name)}, the best box in stock.`}</p>`;
@@ -1953,11 +1957,16 @@ function bfRunVol(){
   if(!String(raw).trim()){box.innerHTML=`<section class="panel"><div class="panel-head"><h2>Closest boxes</h2></div><p class="hint">Enter the cubic volume you need to see the closest boxes in stock.</p></section>`;return}
   const v=parseDim(raw);if(!(v>0)){box.innerHTML=`<div class="alert">Enter a volume greater than zero.</div>`;return}
   const k=unit==="ft"?1728:1,need=v*k,u=unit==="ft"?"cu ft":"cu in",d=unit==="ft"?3:0;
+  bfLast={search:`${bfN(v)} ${u} inside volume`,stock:[],uline:null,total:bf.rows.length,fitCount:0,note:""};
   const all=bf.rows.map(b=>({b,vol:b.L*b.W*b.H}));
   const fits=all.filter(x=>x.vol>=need-1e-9).sort((a,c)=>a.vol-c.vol);
   let h=`<section class="panel"><div class="panel-head"><h2>Closest boxes</h2><span class="hint">${bfN(v)} ${u} · ${fmt(fits.length)} of ${fmt(bf.rows.length)} boxes are big enough</span></div>`;
+  bfLast.fitCount=fits.length;
+  bfLast.stock=fits.slice(0,count).map(x=>({name:x.b.name,dims:bfDims(x.b),
+    rows:[["Volume",`${fmt(x.vol/k,d)} ${u}`],["Extra",`${fmt((x.vol-need)/k,d)} ${u}`],["Filled",fmt(100*need/x.vol,0)+"%"]]}));
   if(!fits.length){
     const big=all.sort((a,c)=>c.vol-a.vol)[0];
+    bfLast.note=`No box in the list holds ${bfN(v)} ${u}.`+(big?` Largest: ${big.b.name} (${bfDims(big.b)}).`:"");
     h+=`<div class="alert">No box in the list holds ${bfN(v)} ${u}.</div>`;
     if(big)h+=`<p class="hint">Largest: ${esc(big.b.name)} (${bfDims(big.b)}, ${fmt(big.vol/k,d)} ${u}).</p>`;
     box.innerHTML=h+`</section>`;return}
@@ -1980,7 +1989,9 @@ function bfUlinePanel(need,up,best,pVol){
     <div class="hdr-actions"><a class="btnlink" href="${BF_ULINE}" target="_blank" rel="noopener">Open Uline boxes</a><button type="button" id="bfCopy" data-size="${txt}">Copy size</button></div>
     <p id="bfCopyMsg" class="hint" role="status"></p></section>`;
 }
+let bfLast=null; // what the results show, for the 4 x 6 report
 function bfRun(){
+  bfLast=null;
   if(bfMode==="vol")return bfRunVol();
   const box=$("bfResults");
   const raw=[$("bfL").value,$("bfW").value,$("bfH").value],dims=raw.map(parseDim);
@@ -1994,11 +2005,15 @@ function bfRun(){
   fits.sort((a,c)=>a.vol-c.vol||a.f.worst-c.f.worst);
   const top=fits.slice(0,count);
   const prod=`${dims.map(bfN).join(" × ")} in`+(pad?` + ${bfN(pad)} in per side`:"");
+  bfLast={search:`Product ${prod}${up?", height kept up":""}`,total:bf.rows.length,fitCount:fits.length,uline:null,note:"",
+    stock:top.map(x=>({name:x.b.name,dims:bfDims(x.b),rows:[["Sits as",x.f.q.map(v=>bfN(v-2*pad)).join(" × ")],
+      ["Room L/W/H",x.f.room.map(bfN).join(" / ")+" in"],["Empty",fmt(100*(1-pVol/x.vol),0)+"%"]]}))};
   let h=`<section class="panel"><div class="panel-head"><h2>Closest boxes</h2><span class="hint">${esc(prod)} · ${fmt(fits.length)} of ${fmt(bf.rows.length)} boxes fit</span></div>`;
   if(!top.length){
     // nothing fits: show the boxes that come nearest, so the user sees how far off they are
     const near=bf.rows.map(b=>({b,short:bfShort(need,b,up)})).sort((a,c)=>a.short-c.short||a.b.L*a.b.W*a.b.H-c.b.L*c.b.W*c.b.H).slice(0,3);
     h+=`<div class="alert">No box in the list is big enough${up?" with the height kept up":""}.</div>`;
+    bfLast.note=`No box in stock is big enough${up?" with the height kept up":""}.`+(near.length?` Nearest: ${near.map(x=>`${x.b.name} (${bfDims(x.b)}, short ${bfN(x.short)} in)`).join("; ")}.`:"");
     if(near.length)h+=`<p class="hint">Nearest: ${near.map(x=>`${esc(x.b.name)} (${bfDims(x.b)}, short by ${bfN(x.short)} in)`).join("; ")}.</p>`;
     box.innerHTML=h+`</section>`+bfUlineSection(need,up,null,pVol,pad,count);return}
   h+=`<div class="cards">`+top.map((x,i)=>bfCard(x,i,[
@@ -2026,6 +2041,103 @@ $("bfFile").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)
   catch(err){bfSrc(`Couldn't read ${f.name}: ${err.message}`,"err")}
   bfRun()});
 let bfStarted=false;
+
+/* 4 x 6 report: opens a new window laid out for a 4 x 6 in label, with Print and Copy image buttons.
+   Copy image puts a PNG on the clipboard to paste into a message (it downloads the PNG where the
+   browser can't copy images). */
+function bfLabelHtml(r){
+  const e=esc, logo=new URL("assets/hat-logo.png",location.href).href, when=new Date().toLocaleString();
+  const list=(items,title,sub)=>!items||!items.length?"":`<h2>${title}${sub?` <small>${sub}</small>`:""}</h2>`+items.map((x,i)=>`
+    <div class="bx${i===0?" first":""}"><div class="top"><span class="rk">${i+1}</span><b class="nm">${e(x.name)}</b>
+      ${x.tight?`<span class="tag">Tighter</span>`:""}<span class="dm">${e(x.dims)} in</span></div>
+      <div class="kv">${x.rows.map(([k,v])=>`<span><i>${e(k)}</i> ${e(v)}</span>`).join("")}</div></div>`).join("");
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Box Finder report</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+@page{size:4in 6in;margin:0}
+*{box-sizing:border-box}
+html,body{margin:0;background:#e4e8ec;color:#1d232b;font-family:"IBM Plex Sans",Arial,sans-serif}
+.bar{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:12px 16px;position:sticky;top:0;background:#e4e8ec}
+.bar button{font:600 14px "IBM Plex Sans",Arial,sans-serif;padding:8px 14px;border-radius:6px;border:1px solid #c3cad2;background:#fff;color:#1d232b;cursor:pointer}
+.bar button.primary{background:#f2b705;border-color:#d9a404}
+#msg{width:100%;text-align:center;font-size:13px;color:#5b6672;min-height:1em;margin:0}
+.wrap{display:flex;justify-content:center;padding:0 16px 24px}
+#label{width:4in;height:6in;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.18);padding:.16in;overflow:hidden;display:flex;flex-direction:column;font-size:var(--fs,10px)}
+.hd{display:flex;align-items:center;gap:.1in;border-bottom:2px solid #1d232b;padding-bottom:.06in}
+.hd img{height:.42in;width:auto}
+.hd .t{flex:1;min-width:0}
+.hd h1{font:700 1.9em/1 "Barlow Condensed","Arial Narrow",Arial,sans-serif;text-transform:uppercase;letter-spacing:.02em;margin:0}
+.hd .d{font-size:.8em;color:#5b6672}
+.tape{height:.09in;margin:0 -.16in;background:repeating-linear-gradient(-45deg,#f2b705 0 .08in,#1d232b .08in .16in)}
+.req{margin:.08in 0 .04in;padding:.06in .08in;border:1.5px solid #1d232b;border-radius:3px}
+.req i{display:block;font-style:normal;font-size:.75em;text-transform:uppercase;letter-spacing:.06em;color:#5b6672}
+.req b{font:700 1.45em/1.1 "Barlow Condensed","Arial Narrow",Arial,sans-serif}
+.req .c{font-size:.8em;color:#5b6672}
+h2{font:700 1.15em/1 "Barlow Condensed","Arial Narrow",Arial,sans-serif;text-transform:uppercase;letter-spacing:.04em;margin:.09in 0 .03in;border-bottom:1.5px solid #f2b705;padding-bottom:.02in}
+h2 small{font:400 .7em "IBM Plex Sans",Arial,sans-serif;text-transform:none;letter-spacing:0;color:#5b6672}
+.bx{padding:.035in 0;border-bottom:1px solid #d3d8de}
+.bx .top{display:flex;align-items:baseline;gap:.05in}
+.rk{display:inline-block;min-width:1.5em;text-align:center;font-weight:600;background:#e4e8ec;border-radius:2px;font-size:.85em}
+.bx.first .rk{background:#f2b705}
+.nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dm{font-family:"IBM Plex Mono",monospace;font-weight:500;white-space:nowrap}
+.tag{font-size:.7em;text-transform:uppercase;letter-spacing:.05em;background:#1d232b;color:#fff;padding:0 .3em;border-radius:2px}
+.kv{display:flex;flex-wrap:wrap;gap:0 .12in;padding-left:1.9em;font-size:.85em}
+.kv i{font-style:normal;color:#5b6672}
+.note{font-size:.85em;margin:.05in 0;color:#b4401f}
+.ft{margin-top:auto;padding-top:.05in;font-size:.75em;color:#5b6672;display:flex;justify-content:space-between}
+@media print{html,body{background:#fff}.bar,.wrap>p{display:none}.wrap{padding:0;display:block}#label{box-shadow:none;margin:0}}
+</style></head><body>
+<div class="bar"><button class="primary" id="print" type="button">Print</button><button id="copy" type="button">Copy image</button><button id="close" type="button">Close</button><p id="msg" role="status"></p></div>
+<div class="wrap"><div id="label">
+  <div class="hd"><img src="${logo}" alt="HAT"><div class="t"><h1>Box Finder</h1><div class="d">${e(when)}</div></div></div>
+  <div class="tape"></div>
+  <div class="req"><i>Requested size</i><b>${e(r.search)}</b><div class="c">${fmt(r.fitCount)} of ${fmt(r.total)} boxes in stock fit</div></div>
+  ${r.note?`<p class="note">${e(r.note)}</p>`:""}
+  ${list(r.stock,"Closest boxes in stock","smallest first")}
+  ${list(r.uline,"Uline boxes","inside dims")}
+  <div class="ft"><span>Ti:Hi Shipment Builder</span><span>4 × 6</span></div>
+</div></div>
+<script>
+(function(){
+  var L=document.getElementById("label"),msg=document.getElementById("msg"),h2c=null;
+  function say(t){msg.textContent=t}
+  // shrink the type until everything fits on one 4 x 6 label
+  function fit(){var fs=10;L.style.setProperty("--fs",fs+"px");
+    while(fs>6&&L.scrollHeight>L.clientHeight+1){fs-=.25;L.style.setProperty("--fs",fs+"px")}}
+  fit();window.addEventListener("load",fit);if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fit);
+  // the image tool loads in the background so Copy image is quick
+  function loadH2C(){if(!h2c)h2c=new Promise(function(ok,bad){if(window.html2canvas)return ok(window.html2canvas);
+    var s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
+    s.onload=function(){ok(window.html2canvas)};s.onerror=function(){h2c=null;bad(new Error("no image tool"))};document.head.appendChild(s)});return h2c}
+  loadH2C().catch(function(){});
+  document.getElementById("print").onclick=function(){window.print()};
+  document.getElementById("close").onclick=function(){window.close()};
+  document.getElementById("copy").onclick=function(){
+    say("Making the image...");
+    var png=loadH2C().then(function(f){return f(L,{scale:2,backgroundColor:"#ffffff"})})
+      .then(function(c){return new Promise(function(ok){c.toBlob(ok,"image/png")})});
+    png.catch(function(){say("Couldn't make the image. Use Print, or take a screenshot.")});
+    function save(){png.then(function(b){var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="box-finder-report.png";
+      document.body.appendChild(a);a.click();a.remove();say("This browser can't copy images, so the picture was downloaded instead.")},function(){})}
+    if(navigator.clipboard&&window.ClipboardItem)
+      navigator.clipboard.write([new ClipboardItem({"image/png":png})]).then(function(){say("Copied. Paste it into your message.")},save);
+    else save();
+  };
+})();
+<\/script>
+</body></html>`;
+}
+$("bfLabel").addEventListener("click",()=>{
+  const m=$("bfLabelMsg"),say=t=>{m.textContent=t;m.hidden=!t};
+  if(!bfLast){say("Enter a size or volume first, so there are results to put on the report.");return}
+  // A blob page (not document.write) so the window runs its own scripts and the image tool can read it.
+  const url=URL.createObjectURL(new Blob([bfLabelHtml(bfLast)],{type:"text/html"}));
+  const w=window.open(url,"_blank","width=480,height=760");
+  say(w?"":"The browser blocked the report window. Allow pop-ups for this site and try again.");
+});
+
 
 /* ---------- PAGES ---------- */
 const PAGE_OK={builder:()=>true,compare:canBoxTools,ship:canBoxTools,boxes:canBoxTools};
