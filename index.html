@@ -356,12 +356,14 @@ th.opt{text-align:right}
   <div class="col">
     <section class="panel" aria-labelledby="shipInH">
       <div class="panel-head"><div><div class="step">Step 1</div><h2 id="shipInH">Order</h2></div></div>
-      <label for="shipQty">Estimated item order quantity<input id="shipQty" type="number" min="0" step="1" placeholder="e.g. 50000"></label>
+      <div class="panel-head" style="margin:0"><span style="font-size:.75rem;color:var(--muted);letter-spacing:.04em;text-transform:uppercase">Estimated item order quantities</span>
+        <button id="shipQAdd" type="button">+ Add quantity</button></div>
+      <div id="shipQtys" class="col" style="gap:8px"></div>
       <label for="shipFee">Estimated pallet location shipping fee ($)<input id="shipFee" type="number" min="0" step="0.01" placeholder="e.g. 85.00"></label>
       <label for="shipStore">Pallet location storage fee ($ per pallet per month)<input id="shipStore" type="number" min="0" step="0.01" placeholder="e.g. 18.00"></label>
       <label for="shipMonths">Months in storage<input id="shipMonths" type="number" min="0" step="0.5" placeholder="1"></label>
       <label for="shipBase">Compare savings against<select id="shipBase"></select></label>
-      <p class="hint">Order quantity is in items, the same units as Units per box on Compare box sizes. The shipping fee is the estimated cost to ship one pallet location. The storage fee is what we count for keeping one pallet in our building for a month; months in storage defaults to 1.</p>
+      <p class="hint">Each order quantity is compared separately. Quantities are in items, the same units as Units per box on Compare box sizes. The shipping fee is the estimated cost to ship one pallet location. The storage fee is what we count for keeping one pallet in our building for a month; months in storage defaults to 1.</p>
     </section>
     <section class="panel" aria-labelledby="shipBoxH">
       <div class="panel-head"><div><div class="step">Step 2</div><h2 id="shipBoxH">Box sizes</h2></div>
@@ -1421,88 +1423,124 @@ function cmpRerender(){try{cmpRenderResults()}catch(e){$("cmpResults").innerHTML
   shipRerender()}
 
 /* ---------- SHIPPING COMPARISON (uses the Compare box sizes boxes and pallet) ---------- */
-const ship={qty:0,fee:0,store:0,months:1,base:-1}; // base -1 = the box that needs the most pallet locations
+const SHIP_QMIN=3, SHIP_QMAX=8;
+const ship={qtys:[0,0,0],fee:0,store:0,months:1,base:-1}; // base -1 = the box that needs the most pallet locations
 const monthsTxt=m=>`${fmt(m,m%1?1:0)} month${m===1?"":"s"}`;
 const money=v=>"$"+Number(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
-function shipCalc(){
-  const C=cmpCalc(), qty=Math.max(0,Math.floor(num(ship.qty))), fee=Math.max(0,num(ship.fee));
-  const store=Math.max(0,num(ship.store)), months=Math.max(0,num(ship.months,1)), anyFee=fee>0||(store>0&&months>0);
+function shipFees(){
+  const fee=Math.max(0,num(ship.fee)), store=Math.max(0,num(ship.store)), months=Math.max(0,num(ship.months,1));
+  const hasStore=store>0&&months>0;
+  return {fee,store,months,hasStore,anyFee:fee>0||hasStore,both:fee>0&&hasStore};
+}
+// One order quantity: pallet locations, shipping + storage cost and savings for every box.
+function shipCalc(qtyIn){
+  const C=cmpCalc(), F=shipFees(), qty=Math.max(0,Math.floor(num(qtyIn)));
   // cost = shipping + storage; storage = locations x fee per pallet per month x months
   const rows=C.rows.map(x=>{if(x.err)return x;const locs=qty>0?Math.ceil(qty/x.unitsPP):0;
-    return {...x,locs,shipCost:locs*fee,storeCost:locs*store*months,cost:locs*fee+locs*store*months}});
+    const shipCost=locs*F.fee, storeCost=locs*F.store*F.months;
+    return {...x,locs,shipCost,storeCost,cost:shipCost+storeCost}});
   const ok=rows.filter(x=>!x.err);
   const worst=[...ok].sort((a,b)=>(b.locs-a.locs)||(a.unitsPP-b.unitsPP)||(a.i-b.i))[0]||null;
   const base=ship.base<0?worst:(ok.find(x=>x.i===ship.base)||worst);
   ok.forEach(x=>{x.saveLocs=base?base.locs-x.locs:0;x.save=base?base.cost-x.cost:0;
     x.saveShip=base?base.shipCost-x.shipCost:0;x.saveStore=base?base.storeCost-x.storeCost:0});
   const best=[...ok].sort((a,b)=>(a.locs-b.locs)||(b.unitsPP-a.unitsPP)||(a.i-b.i))[0]||null;
-  return {C,qty,fee,store,months,anyFee,rows,ok,base,best};
+  return {C,qty,...F,rows,ok,base,best};
 }
-function shipRenderInputs(){
+const shipBestName=S=>S.ok.length>1&&S.ok.every(x=>x.locs===S.best.locs)?"Tie":S.best.b.name;
+// Every quantity entered (blanks skipped), in the order typed.
+function shipCalcAll(){
+  const qs=ship.qtys.map(q=>Math.max(0,Math.floor(num(q)))).filter(q=>q>0);
+  return {C:cmpCalc(),F:shipFees(),list:qs.map(q=>shipCalc(q))};
+}
+// One-line summary for a quantity. b() wraps the emphasised parts (HTML on the page, plain in the PDF).
+function shipVerdict(S,b,word){
+  const {qty,best,base,ok,anyFee,both,hasStore}=S;
+  const split=x=>both?` (${money(x.saveShip)} shipping + ${money(x.saveStore)} storage)`:"";
+  const q=`${fmt(qty)} ${word}`;
+  if(ok.length<2) return `${q}: ${b(best.b.name)} needs ${fmt(best.locs)} pallet location${best.locs===1?"":"s"}${anyFee?`, about ${money(best.cost)}${both?" for shipping and storage":hasStore?" for storage":""}`:""}.`;
+  if(best.saveLocs>0) return `${q}: ${b(best.b.name)} needs ${fmt(best.locs)} pallet locations, ${fmt(best.saveLocs)} fewer than ${base.b.name}${anyFee?`, an estimated savings of ${b(money(best.save))}${split(best)}`:""}.`;
+  if(best===base) return `${q}: ${b(base.b.name)} already needs the fewest pallet locations (${fmt(base.locs)}). No other box size saves money.`;
+  return `${q}: ${b(best.b.name)} and ${b(base.b.name)} both need ${fmt(best.locs)} pallet locations, so there is no savings.`;
+}
+function shipRenderBaseOpts(){ // box names can change on Compare box sizes
   const opts=`<option value="-1">The box needing the most pallet locations</option>`+cmp.boxes.map((b,i)=>`<option value="${i}">${esc(b.name||"Box "+LETTERS[i])}</option>`).join("");
   if(ship.base>=cmp.boxes.length)ship.base=-1;
-  $("shipBase").innerHTML=opts;$("shipBase").value=String(ship.base);
-  $("shipQty").value=ship.qty||"";$("shipFee").value=ship.fee||"";$("shipStore").value=ship.store||"";$("shipMonths").value=ship.months;
+  if($("shipBase").innerHTML!==opts)$("shipBase").innerHTML=opts;$("shipBase").value=String(ship.base);
+}
+function shipRenderInputs(){
+  $("shipFee").value=ship.fee||"";$("shipStore").value=ship.store||"";$("shipMonths").value=ship.months;
+  shipRenderBaseOpts();shipRenderQtys();
+}
+function shipRenderQtys(){
+  const ph=["e.g. 10000","e.g. 50000","e.g. 100000"];
+  $("shipQtys").innerHTML=ship.qtys.map((q,i)=>`<div class="item-head" style="gap:8px">
+    <label for="sq-${i}" style="flex:1">Quantity ${i+1}<input id="sq-${i}" data-q="${i}" type="number" min="0" step="1" value="${q||""}" placeholder="${ph[i]||""}"></label>
+    ${ship.qtys.length>SHIP_QMIN?`<button class="x" type="button" data-qdel="${i}" aria-label="Remove quantity ${i+1}" style="align-self:flex-end">Remove</button>`:""}</div>`).join("");
+  $("shipQAdd").disabled=ship.qtys.length>=SHIP_QMAX;
 }
 function shipRenderResults(){
-  shipRenderInputs();
-  const S=shipCalc(), {C,qty,fee,store,months,anyFee,ok,base,best}=S;
-  const both=fee>0&&store>0&&months>0, hasStore=store>0&&months>0;
-  const split=x=>both?` (${money(x.saveShip)} shipping + ${money(x.saveStore)} storage)`:"";
+  shipRenderBaseOpts();
+  const A=shipCalcAll(), C=A.C, F=A.F, {fee,store,months,anyFee,both,hasStore}=F;
   $("shipBoxes").innerHTML=cmp.boxes.map((b,i)=>`<div class="cmpbar" style="grid-template-columns:minmax(0,1fr) auto"><span class="nm"><i class="swatch" style="background:${color(i)}"></i>${esc(b.name)}</span>
     <span class="val">${b.L} × ${b.W} × ${b.H} in · ${fmt(Math.max(1,Math.floor(num(b.units,1))))}/box</span></div>`).join("")+
     `<p class="hint">Pallet: ${esc(C.p.name)}, ${fmt(cmp.stackH,1)} in max stack height.</p>`;
   let h="";
-  S.rows.filter(x=>x.err).forEach(x=>{h+=`<div class="alert"><b>${esc(x.b.name)}:</b> ${x.err}</div>`});
-  if(!ok.length){$("shipResults").innerHTML=h||`<div class="alert">Add box sizes on Compare box sizes first.</div>`;return}
-  if(!(qty>0)){$("shipResults").innerHTML=h+`<div class="alert">Enter the estimated item order quantity to see pallet locations and cost.</div>`;return}
+  C.rows.filter(x=>x.err).forEach(x=>{h+=`<div class="alert"><b>${esc(x.b.name)}:</b> ${x.err}</div>`});
+  const okBoxes=C.rows.filter(x=>!x.err);
+  if(!okBoxes.length){$("shipResults").innerHTML=h||`<div class="alert">Add box sizes on Compare box sizes first.</div>`;return}
+  if(!A.list.length){$("shipResults").innerHTML=h+`<div class="alert">Enter at least one estimated order quantity to see pallet locations and cost.</div>`;return}
   const word=cmp.item.trim()?"units of "+esc(cmp.item.trim()):"units";
-  let verdict;
-  const others=ok.filter(x=>x!==best);
-  if(!others.length) verdict=`<b>${esc(best.b.name)}</b> needs ${fmt(best.locs)} pallet location${best.locs===1?"":"s"} for ${fmt(qty)} ${word}${anyFee?`, about ${money(best.cost)}${both?" for shipping and storage":hasStore?" for storage":""}`:""}.`;
-  else if(best.saveLocs>0) verdict=`<b>${esc(best.b.name)}</b> needs the fewest pallet locations: ${fmt(best.locs)} for ${fmt(qty)} ${word}. That is ${fmt(best.saveLocs)} fewer than ${esc(base.b.name)}${anyFee?`, an estimated savings of <b>${money(best.save)}</b>${split(best)}`:""}.`;
-  else if(best===base) verdict=`<b>${esc(base.b.name)}</b> already needs the fewest pallet locations (${fmt(base.locs)}). No other box size saves money on this order.`;
-  else verdict=`<b>${esc(best.b.name)}</b> and <b>${esc(base.b.name)}</b> both need ${fmt(best.locs)} pallet locations, so there is no savings on this order.`;
-  const maxL=Math.max(...ok.map(x=>x.locs),1);
-  h+=`<section class="panel"><div class="panel-head"><h2>Result</h2><span class="hint">${fmt(qty)} ${word}${fee>0?` · ${money(fee)} shipping per pallet location`:""}${hasStore?` · ${money(store)} storage per pallet per month × ${monthsTxt(months)}`:""}</span></div>
-    <p class="verdict">${verdict}</p>
-    <div class="cmpbars">${[...ok].sort((a,b)=>a.i-b.i).map(x=>`<div class="cmpbar"><span class="nm"><i class="swatch" style="background:${color(x.i)}"></i>${esc(x.b.name)}</span>
-      <div class="bar"><i style="width:${x.locs/maxL*100}%;background:${color(x.i)}"></i></div>
-      <span class="val">${fmt(x.locs)} location${x.locs===1?"":"s"}</span></div>`).join("")}</div>
-    ${anyFee?"":`<p class="hint">Enter the pallet location shipping fee or storage fee to see estimated cost and savings.</p>`}
-  </section>`;
-  const cols=S.rows, cell=(x,fn)=>x.err?"–":fn(x);
-  const lo=k=>Math.min(...ok.map(x=>x[k])), hi=k=>Math.max(...ok.map(x=>x[k]));
-  const isBest=(x,k,dir)=>!x.err&&lo(k)!==hi(k)&&x[k]===(dir>0?hi(k):lo(k));
-  const row=(label,fn,k,dir)=>`<tr><th scope="row">${label}</th>${cols.map(x=>`<td class="n${k&&isBest(x,k,dir)?" best":""}">${cell(x,fn)}</td>`).join("")}</tr>`;
+  const base0=A.list[0].base;
   const signed=(v,f)=>v>0?f(v):v<0?"−"+f(-v):f(0);
-  h+=`<section class="panel"><div class="panel-head"><h2>Side by side</h2><span class="hint">Savings are against ${esc(base.b.name)}. Underlined = best in that row</span></div>
-   <div class="tablewrap"><table><thead><tr><th></th>${cols.map(x=>`<th class="opt"><span style="display:inline-flex;align-items:center;gap:6px"><i class="swatch" style="background:${color(x.i)}"></i>${esc(x.b.name)}</span></th>`).join("")}</tr></thead><tbody>
-   ${row("Box size L × W × H in",x=>`${x.b.L} × ${x.b.W} × ${x.b.H}`)}
-   ${row("Units per box",x=>fmt(x.units))}
-   ${row("Ti:Hi",x=>`${x.r.ti}:${x.r.hi}`)}
-   ${row("Units per pallet",x=>fmt(x.unitsPP),"unitsPP",1)}
-   ${row("Boxes to ship",x=>fmt(Math.ceil(qty/x.units)))}
-   ${row("Pallet locations needed",x=>`<b>${fmt(x.locs)}</b>`,"locs",-1)}
-   ${row("Last pallet fill",x=>{const r=qty-(x.locs-1)*x.unitsPP;return fmt(r/x.unitsPP*100,0)+"%"})}
-   ${fee>0?row("Estimated shipping cost",x=>money(x.shipCost),"shipCost",-1):""}
-   ${hasStore?row(`Estimated storage cost (${monthsTxt(months)})`,x=>money(x.storeCost),"storeCost",-1):""}
-   ${both?row("Total estimated cost",x=>`<b>${money(x.cost)}</b>`,"cost",-1):""}
-   ${row("Pallet locations saved",x=>signed(x.saveLocs,fmt),"saveLocs",1)}
-   ${both?row("Shipping savings",x=>signed(x.saveShip,money),"saveShip",1):""}
-   ${both?row("Storage savings",x=>signed(x.saveStore,money),"saveStore",1):""}
-   ${anyFee?row(both?"Total estimated savings":"Estimated cost savings",x=>`<b>${signed(x.save,money)}</b>`,"save",1):""}
-   ${anyFee?row(both?"Total cost per item":"Cost per item",x=>"$"+(x.cost/qty).toFixed(4),"cost",-1):""}
-   </tbody></table></div>
-   <p class="hint">Pallet locations = order quantity ÷ units per pallet, rounded up. Units per pallet come from Compare box sizes, using its pallet and stack height. Storage cost = pallet locations × storage fee × months. A negative savings means that box costs more than ${esc(base.b.name)}.</p></section>`;
+  const sw=x=>`<span style="display:inline-flex;align-items:center;gap:6px"><i class="swatch" style="background:${color(x.i)}"></i>${esc(x.b.name)}</span>`;
+  // Result: one line per quantity + summary table
+  h+=`<section class="panel"><div class="panel-head"><h2>Result</h2><span class="hint">${fee>0?`${money(fee)} shipping per pallet location`:"No shipping fee"}${hasStore?` · ${money(store)} storage per pallet per month × ${monthsTxt(months)}`:""}</span></div>
+    ${A.list.map(S=>`<p class="verdict" style="font-size:1rem">${shipVerdict(S,t=>`<b>${esc(t)}</b>`,word)}</p>`).join("")}
+    <div class="tablewrap"><table><thead><tr><th>Order quantity</th>${okBoxes.map(x=>`<th class="opt">${sw(x)}</th>`).join("")}<th class="opt">Best box</th><th class="opt">${anyFee?"Est. savings":"Locations saved"}</th></tr></thead><tbody>
+    ${A.list.map(S=>{const lo=Math.min(...S.ok.map(x=>x.locs));return `<tr><th scope="row">${fmt(S.qty)}</th>${S.ok.map(x=>`<td class="n${x.locs===lo&&S.ok.some(y=>y.locs!==lo)?" best":""}">${fmt(x.locs)} loc${anyFee?`<br><span class="hint">${money(x.cost)}</span>`:""}</td>`).join("")}
+      <td class="n">${esc(shipBestName(S))}</td><td class="n"><b>${anyFee?money(Math.max(0,S.best.save)):fmt(Math.max(0,S.best.saveLocs))}</b></td></tr>`}).join("")}
+    </tbody></table></div>
+    <p class="hint">Each box shows pallet locations needed${anyFee?` and estimated ${both?"shipping + storage":hasStore?"storage":"shipping"} cost`:""}. Savings are against ${esc(base0.b.name)}.${anyFee?"":" Enter the pallet location shipping fee or storage fee to see estimated cost and savings."}</p>
+  </section>`;
+  // Boxes (the same for every quantity)
+  const cols=C.rows, cell=(x,fn)=>x.err?"–":fn(x);
+  const table=(rowsHtml)=>`<div class="tablewrap"><table><thead><tr><th></th>${cols.map(x=>`<th class="opt">${sw(x)}</th>`).join("")}</tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
+  const mkRow=(ok)=>{const lo=k=>Math.min(...ok.map(x=>x[k])), hi=k=>Math.max(...ok.map(x=>x[k]));
+    const isBest=(x,k,dir)=>!x.err&&lo(k)!==hi(k)&&x[k]===(dir>0?hi(k):lo(k));
+    return (label,fn,k,dir,src)=>`<tr><th scope="row">${label}</th>${(src||cols).map(x=>`<td class="n${k&&isBest(x,k,dir)?" best":""}">${cell(x,fn)}</td>`).join("")}</tr>`};
+  const r0=mkRow(okBoxes);
+  h+=`<section class="panel"><div class="panel-head"><h2>Boxes</h2><span class="hint">Same for every quantity</span></div>${table(
+    r0("Box size L × W × H in",x=>`${x.b.L} × ${x.b.W} × ${x.b.H}`)+r0("Units per box",x=>fmt(x.units))+
+    r0("Ti:Hi",x=>`${x.r.ti}:${x.r.hi}`)+r0("Units per pallet",x=>fmt(x.unitsPP),"unitsPP",1))}</section>`;
+  // One detail table per quantity
+  for(const S of A.list){
+    const qty=S.qty, row=mkRow(S.ok), src=S.rows;
+    const R=(l,fn,k,d)=>row(l,fn,k,d,src);
+    h+=`<section class="panel"><div class="panel-head"><h2>Order of ${fmt(qty)}</h2><span class="hint">Savings are against ${esc(S.base.b.name)}. Underlined = best in that row</span></div>${table(
+      R("Boxes to ship",x=>fmt(Math.ceil(qty/x.units)))+
+      R("Pallet locations needed",x=>`<b>${fmt(x.locs)}</b>`,"locs",-1)+
+      R("Last pallet fill",x=>fmt((qty-(x.locs-1)*x.unitsPP)/x.unitsPP*100,0)+"%")+
+      (fee>0?R("Estimated shipping cost",x=>money(x.shipCost),"shipCost",-1):"")+
+      (hasStore?R(`Estimated storage cost (${monthsTxt(months)})`,x=>money(x.storeCost),"storeCost",-1):"")+
+      (both?R("Total estimated cost",x=>`<b>${money(x.cost)}</b>`,"cost",-1):"")+
+      R("Pallet locations saved",x=>signed(x.saveLocs,fmt),"saveLocs",1)+
+      (both?R("Shipping savings",x=>signed(x.saveShip,money),"saveShip",1)+R("Storage savings",x=>signed(x.saveStore,money),"saveStore",1):"")+
+      (anyFee?R(both?"Total estimated savings":"Estimated cost savings",x=>`<b>${signed(x.save,money)}</b>`,"save",1)+
+        R(both?"Total cost per item":"Cost per item",x=>"$"+(x.cost/qty).toFixed(4),"cost",-1):""))}</section>`;
+  }
+  h+=`<p class="hint">Pallet locations = order quantity ÷ units per pallet, rounded up. Units per pallet come from Compare box sizes, using its pallet and stack height. Storage cost = pallet locations × storage fee × months. A negative savings means that box costs more than the box it's measured against.</p>`;
   $("shipResults").innerHTML=h;
 }
 function shipRerender(){try{shipRenderResults()}catch(e){$("shipResults").innerHTML=`<div class="alert">Couldn't calculate: ${esc(e.message)}</div>`}}
-$("shipQty").addEventListener("input",e=>{ship.qty=num(e.target.value);shipRerender()});
+$("shipQtys").addEventListener("input",e=>{const i=e.target.dataset.q;if(i===undefined)return;ship.qtys[+i]=num(e.target.value);shipRerender()});
+$("shipQtys").addEventListener("click",e=>{const d=e.target.dataset.qdel;if(d===undefined)return;ship.qtys.splice(+d,1);shipRenderQtys();shipRerender()});
+$("shipQAdd").addEventListener("click",()=>{if(ship.qtys.length>=SHIP_QMAX)return;ship.qtys.push(0);shipRenderQtys();shipRerender();const el=$("sq-"+(ship.qtys.length-1));if(el)el.focus()});
 $("shipFee").addEventListener("input",e=>{ship.fee=num(e.target.value);shipRerender()});
 $("shipStore").addEventListener("input",e=>{ship.store=num(e.target.value);shipRerender()});
 $("shipMonths").addEventListener("input",e=>{ship.months=e.target.value===""?1:num(e.target.value);shipRerender()});
 $("shipBase").addEventListener("change",e=>{ship.base=+e.target.value;shipRerender()});
+shipRenderInputs();
 $("cmpList").addEventListener("input",e=>{
   const it=e.target.closest(".item"),f=e.target.dataset.f;if(!it||!f)return;
   const n=+it.dataset.i,b=cmp.boxes[n];
@@ -1632,74 +1670,87 @@ wirePdf({dl:"cmpPdfBtn",pr:"cmpPdfPrint",msg:"cmpPdfMsg",build:buildCmpPdf,file:
 /* ---------- SHIPPING COMPARISON PDF REPORT ---------- */
 async function buildShipPdf(){
   shipRerender();
-  const S=shipCalc(), {C,qty,fee,store,months,anyFee,ok,base,best}=S; const {jsPDF}=window.jspdf;
-  const both=fee>0&&store>0&&months>0, hasStore=store>0&&months>0;
-  if(!ok.length) throw new Error("No box fits on the pallet yet, so there's nothing to report.");
-  if(!(qty>0)) throw new Error("Enter the estimated item order quantity first.");
-  const item=cmp.item.trim();
+  const A=shipCalcAll(), C=A.C, {fee,store,months,anyFee,both,hasStore}=A.F; const {jsPDF}=window.jspdf;
+  const okBoxes=C.rows.filter(x=>!x.err);
+  if(!okBoxes.length) throw new Error("No box fits on the pallet yet, so there's nothing to report.");
+  if(!A.list.length) throw new Error("Enter at least one estimated order quantity first.");
+  const item=cmp.item.trim(), L=A.list, first=L[0], last=L[L.length-1];
   const doc=new jsPDF({unit:"pt",format:"letter"}); const PW=612,PH=792,M=40,CW=PW-2*M;
   let y; const ink=[29,35,43],muted=[91,102,114];
   const usd=v=>"$"+Number(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
-  const heading=t=>{y+=6;doc.setFont("helvetica","bold");doc.setFontSize(13);doc.setTextColor(...ink);doc.text(t.toUpperCase(),M,y+12);
+  const sgn=(v,f)=>v<0?"-"+f(-v):f(v);
+  const need=h=>{if(y+h>PH-M){doc.addPage();y=M}};
+  const heading=(t,next=0)=>{need(40+next);y+=6;doc.setFont("helvetica","bold");doc.setFontSize(13);doc.setTextColor(...ink);doc.text(t.toUpperCase(),M,y+12);
     doc.setDrawColor(242,183,5);doc.setLineWidth(2);doc.line(M,y+18,M+CW,y+18);y+=30};
   const date=new Date().toLocaleString();
   y=await pdfHeader(doc,"Shipping Comparison","Ti:Hi Shipment Builder  ·  China to HAT  ·  "+date,PW,M);
-  const tiles=[["Order quantity",fmt(qty)],["Best box",best.b.name],["Locations saved",fmt(Math.max(0,best.saveLocs))],
-    [anyFee?"Est. savings":"Pallet locations",anyFee?usd(Math.max(0,best.save)):fmt(best.locs)]];
+  const sv=S=>anyFee?usd(Math.max(0,S.best.save)):fmt(Math.max(0,S.best.saveLocs))+" loc";
+  const tiles=[["Quantities compared",String(L.length)],[`Best box at ${fmt(last.qty)}`,shipBestName(last)],
+    [`${anyFee?"Savings":"Saved"} at ${fmt(first.qty)}`,sv(first)],[`${anyFee?"Savings":"Saved"} at ${fmt(last.qty)}`,sv(last)]];
   const tw=(CW-30)/4;
   tiles.forEach(([k,v],i)=>{const x=M+i*(tw+10);doc.setDrawColor(211,216,222);doc.setLineWidth(.8);doc.rect(x,y,tw,46);
     doc.setFillColor(242,183,5);doc.rect(x,y+43,tw,3,"F");
-    doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...muted);doc.text(k.toUpperCase(),x+8,y+13);
+    doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...muted);doc.text(doc.splitTextToSize(k.toUpperCase(),tw-12)[0],x+8,y+13);
     doc.setFont("helvetica","bold");let fs=17;doc.setFontSize(fs);while(fs>9&&doc.getTextWidth(String(v))>tw-16){fs--;doc.setFontSize(fs)}
     doc.setTextColor(...ink);doc.text(doc.splitTextToSize(String(v),tw-16)[0],x+8,y+34)});
   y+=62;
-  const vEl=$("shipResults").querySelector(".verdict");
-  if(vEl){doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...ink);const vl=doc.splitTextToSize(vEl.textContent.trim(),CW);doc.text(vl,M,y);y+=vl.length*14+4}
-  doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...muted);
-  const settings=`Item: ${item||"-"}  ·  Order quantity ${fmt(qty)} units  ·  Shipping fee ${fee>0?usd(fee)+" per pallet location":"not entered"}  ·  Storage fee ${hasStore?`${usd(store)} per pallet per month x ${monthsTxt(months)}`:"not entered"}  ·  Savings measured against ${base.b.name}  ·  Pallet ${C.p.name}: ${cmp.pal.L} x ${cmp.pal.W} in, max stack height ${cmp.stackH} in ${cmp.stackInclPallet?"(includes pallet)":"(product only)"}`;
+  const word=item?"units of "+item:"units";
+  doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(...ink);
+  L.forEach(S=>{const vl=doc.splitTextToSize(shipVerdict(S,t=>t,word),CW);need(vl.length*13+4);doc.text(vl,M,y);y+=vl.length*13+4});
+  y+=2;doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...muted);
+  const settings=`Item: ${item||"-"}  ·  Order quantities ${L.map(S=>fmt(S.qty)).join(", ")}  ·  Shipping fee ${fee>0?usd(fee)+" per pallet location":"not entered"}  ·  Storage fee ${hasStore?`${usd(store)} per pallet per month x ${monthsTxt(months)}`:"not entered"}  ·  Savings measured against ${first.base.b.name}  ·  Pallet ${C.p.name}: ${cmp.pal.L} x ${cmp.pal.W} in, max stack height ${cmp.stackH} in ${cmp.stackInclPallet?"(includes pallet)":"(product only)"}`;
   const lines=doc.splitTextToSize(settings,CW);doc.text(lines,M,y);y+=lines.length*11+8;
-  // Bars: pallet locations per box
-  heading("Pallet locations needed");
-  const maxL=Math.max(...ok.map(x=>x.locs),1), byI=[...ok].sort((a,b)=>a.i-b.i);
-  byI.forEach(x=>{const c=hex(color(x.i));doc.setFillColor(...c);doc.rect(M,y-7,8,8,"F");
-    doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...ink);doc.text(doc.splitTextToSize(x.b.name,120)[0],M+14,y);
-    doc.setFillColor(238,240,243);doc.rect(M+140,y-8,CW-240,10,"F");doc.setFillColor(...c);doc.rect(M+140,y-8,(CW-240)*x.locs/maxL,10,"F");
-    doc.setFont("courier","normal");doc.text(`${fmt(x.locs)} locations`,M+CW,y,{align:"right"});y+=18});
-  y+=6;
-  heading("Side by side");
-  const cols=S.rows, sgn=(v,f)=>v<0?"-"+f(-v):f(v);
-  const rows=[
-    ["Box size L x W x H in",x=>`${x.b.L} x ${x.b.W} x ${x.b.H}`],
-    ["Units per box",x=>fmt(x.units)],
-    ["Ti:Hi",x=>`${x.r.ti}:${x.r.hi}`],
-    ["Units per pallet",x=>fmt(x.unitsPP),"unitsPP",1],
-    ["Boxes to ship",x=>fmt(Math.ceil(qty/x.units))],
-    ["Pallet locations needed",x=>fmt(x.locs),"locs",-1],
-    ["Last pallet fill",x=>fmt((qty-(x.locs-1)*x.unitsPP)/x.unitsPP*100,0)+"%"],
-    ...(fee>0?[["Estimated shipping cost",x=>usd(x.shipCost),"shipCost",-1]]:[]),
-    ...(hasStore?[[`Estimated storage cost (${monthsTxt(months)})`,x=>usd(x.storeCost),"storeCost",-1]]:[]),
-    ...(both?[["Total estimated cost",x=>usd(x.cost),"cost",-1]]:[]),
-    ["Pallet locations saved",x=>sgn(x.saveLocs,fmt),"saveLocs",1],
-    ...(both?[["Shipping savings",x=>sgn(x.saveShip,usd),"saveShip",1],["Storage savings",x=>sgn(x.saveStore,usd),"saveStore",1]]:[]),
-    ...(anyFee?[[both?"Total estimated savings":"Estimated cost savings",x=>sgn(x.save,usd),"save",1],[both?"Total cost per item":"Cost per item",x=>"$"+(x.cost/qty).toFixed(4),"cost",-1]]:[])];
-  const bestCells=new Set();
-  rows.forEach(([,,key,dir],ri)=>{if(!key)return;const v=ok.map(x=>x[key]);const t=dir>0?Math.max(...v):Math.min(...v);
-    if(Math.max(...v)-Math.min(...v)<1e-9)return;cols.forEach((x,ci)=>{if(!x.err&&Math.abs(x[key]-t)<1e-9)bestCells.add(ri+"|"+(ci+1))})});
-  const colW=Math.min(110,(CW-140)/cols.length);
-  doc.autoTable({startY:y,margin:{left:M,right:M},theme:"grid",styles:{fontSize:8.5,cellPadding:4,textColor:ink,lineColor:[211,216,222]},
-    headStyles:{fillColor:[29,35,43],textColor:255,fontStyle:"bold",halign:"right"},
-    head:[["",...cols.map(x=>x.b.name)]],
-    body:rows.map(([label,fn])=>[label,...cols.map(x=>x.err?"-":String(fn(x)))]),
-    columnStyles:Object.fromEntries(cols.map((x,i)=>[i+1,{halign:"right",cellWidth:colW}])),
-    didParseCell:d=>{if(d.section==="head"&&d.column.index===0)d.cell.styles.halign="left";
-      if(d.section==="body"&&bestCells.has(d.row.index+"|"+d.column.index)){d.cell.styles.fillColor=[253,240,196];d.cell.styles.fontStyle="bold"}},
-    didDrawCell:d=>{if(d.section==="head"&&d.column.index>0){const c=hex(color(cols[d.column.index-1].i));doc.setFillColor(...c);doc.rect(d.cell.x+3,d.cell.y+d.cell.height/2-3,6,6,"F")}}});
+  const head=(cols,extra=[])=>[["",...cols.map(x=>x.b.name),...extra]];
+  const swatches=cols=>d=>{if(d.section==="head"&&d.column.index>0&&d.column.index<=cols.length){const c=hex(color(cols[d.column.index-1].i));doc.setFillColor(...c);doc.rect(d.cell.x+3,d.cell.y+d.cell.height/2-3,6,6,"F")}};
+  const tblBase={margin:{left:M,right:M},theme:"grid",styles:{fontSize:8.5,cellPadding:4,textColor:ink,lineColor:[211,216,222]},
+    headStyles:{fillColor:[29,35,43],textColor:255,fontStyle:"bold",halign:"right"}};
+  const hl=cells=>d=>{if(d.section==="head"&&d.column.index===0)d.cell.styles.halign="left";
+    if(d.section==="body"&&cells.has(d.row.index+"|"+d.column.index)){d.cell.styles.fillColor=[253,240,196];d.cell.styles.fontStyle="bold"}};
+  // Summary: one row per quantity
+  heading("By order quantity",60);
+  const sumCells=new Set();
+  L.forEach((S,ri)=>{const lo=Math.min(...S.ok.map(x=>x.locs));if(S.ok.every(x=>x.locs===lo))return;S.ok.forEach((x,ci)=>{if(x.locs===lo)sumCells.add(ri+"|"+(ci+1))})});
+  doc.autoTable({...tblBase,startY:y,head:[["Order qty",...okBoxes.map(x=>x.b.name),"Best box",anyFee?"Est. savings":"Locations saved"]],
+    body:L.map(S=>[fmt(S.qty),...S.ok.map(x=>`${fmt(x.locs)} loc${anyFee?"\n"+usd(x.cost):""}`),shipBestName(S),anyFee?usd(Math.max(0,S.best.save)):fmt(Math.max(0,S.best.saveLocs))]),
+    columnStyles:Object.fromEntries([...okBoxes.map((x,i)=>[i+1,{halign:"right"}]),[okBoxes.length+1,{halign:"right"}],[okBoxes.length+2,{halign:"right",fontStyle:"bold"}]]),
+    didParseCell:hl(sumCells),didDrawCell:swatches(okBoxes)});
   y=doc.lastAutoTable.finalY+8;
   doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...muted);
-  const note=doc.splitTextToSize(`Highlighted = best in that row. Pallet locations = order quantity / units per pallet, rounded up. Units per pallet come from Compare box sizes. Storage cost = pallet locations x storage fee x months. Savings are against ${base.b.name}; a negative value means that box costs more.`,CW);
-  doc.text(note,M,y+8);y+=note.length*10+14;
+  const sn=doc.splitTextToSize(`Each box shows pallet locations needed${anyFee?` and estimated ${both?"shipping + storage":hasStore?"storage":"shipping"} cost`:""}. Highlighted = fewest pallet locations.`,CW);
+  doc.text(sn,M,y+8);y+=sn.length*10+14;
+  // Boxes: the same for every quantity
+  const cols=C.rows, colW=Math.min(110,(CW-140)/cols.length);
+  const detail=(rows,ok,startY)=>{const cells=new Set();
+    rows.forEach(([,,key,dir],ri)=>{if(!key)return;const v=ok.map(x=>x[key]);const t=dir>0?Math.max(...v):Math.min(...v);
+      if(Math.max(...v)-Math.min(...v)<1e-9)return;ok.forEach(x=>{const ci=cols.findIndex(c=>c.i===x.i);if(Math.abs(x[key]-t)<1e-9)cells.add(ri+"|"+(ci+1))})});
+    doc.autoTable({...tblBase,startY,head:head(cols),body:rows.map(([label,fn])=>[label,...cols.map(x=>x.err?"-":String(fn(x)))]),
+      columnStyles:Object.fromEntries(cols.map((x,i)=>[i+1,{halign:"right",cellWidth:colW}])),didParseCell:hl(cells),didDrawCell:swatches(cols)});
+    y=doc.lastAutoTable.finalY+8};
+  heading("Boxes",80);
+  detail([["Box size L x W x H in",x=>`${x.b.L} x ${x.b.W} x ${x.b.H}`],["Units per box",x=>fmt(x.units)],["Ti:Hi",x=>`${x.r.ti}:${x.r.hi}`],
+    ["Units per pallet",x=>fmt(x.unitsPP),"unitsPP",1]],okBoxes,y);
+  // One detail table per quantity
+  for(const S of L){
+    const qty=S.qty, byI=new Map(S.rows.map(x=>[x.i,x])), at=fn=>x=>fn(byI.get(x.i));
+    const rows=[
+      ["Boxes to ship",x=>fmt(Math.ceil(qty/x.units))],
+      ["Pallet locations needed",x=>fmt(x.locs),"locs",-1],
+      ["Last pallet fill",x=>fmt((qty-(x.locs-1)*x.unitsPP)/x.unitsPP*100,0)+"%"],
+      ...(fee>0?[["Estimated shipping cost",x=>usd(x.shipCost),"shipCost",-1]]:[]),
+      ...(hasStore?[[`Estimated storage cost (${monthsTxt(months)})`,x=>usd(x.storeCost),"storeCost",-1]]:[]),
+      ...(both?[["Total estimated cost",x=>usd(x.cost),"cost",-1]]:[]),
+      ["Pallet locations saved",x=>sgn(x.saveLocs,fmt),"saveLocs",1],
+      ...(both?[["Shipping savings",x=>sgn(x.saveShip,usd),"saveShip",1],["Storage savings",x=>sgn(x.saveStore,usd),"saveStore",1]]:[]),
+      ...(anyFee?[[both?"Total estimated savings":"Estimated cost savings",x=>sgn(x.save,usd),"save",1],[both?"Total cost per item":"Cost per item",x=>"$"+(x.cost/qty).toFixed(4),"cost",-1]]:[])
+    ].map(([l,fn,k,d])=>[l,at(fn),k,d]);
+    heading(`Order of ${fmt(qty)}`,(rows.length+1)*18+10); // keep each table on one page
+    detail(rows,S.ok,y);
+  }
+  doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...muted);
+  const note=doc.splitTextToSize(`Highlighted = best in that row. Pallet locations = order quantity / units per pallet, rounded up. Units per pallet come from Compare box sizes. Storage cost = pallet locations x storage fee x months. Savings are against ${first.base.b.name}; a negative value means that box costs more.`,CW);
+  need(note.length*10+14);doc.text(note,M,y+8);y+=note.length*10+14;
   const errs=cols.filter(x=>x.err);
-  if(errs.length){doc.setTextColor(180,64,31);errs.forEach(x=>{doc.text(`${x.b.name}: ${x.err}`,M,y);y+=12})}
+  if(errs.length){doc.setTextColor(180,64,31);errs.forEach(x=>{need(14);doc.text(`${x.b.name}: ${x.err}`,M,y);y+=12})}
   // The full box size comparison follows, so the report shows how each box packs as well as what it costs to ship.
   await buildCmpPdf(doc);
   pdfFooter(doc,`Shipping Comparison  ·  ${date}`,PW,PH,M);
@@ -2003,7 +2054,7 @@ document.querySelector(".pagenav").addEventListener("click",e=>{const pg=e.targe
 window.addEventListener("hashchange",()=>showPage(location.hash.slice(1)));
 cmpRenderInputs();cmpRerender();showPage(location.hash.slice(1));
 
-window.__tihi={layerPattern,plan:()=>plan(),loadTruck:b=>loadTruck(b),state:()=>state,compare:()=>cmpCalc(),ship:()=>shipCalc(),boxFit:()=>bf};
+window.__tihi={layerPattern,plan:()=>plan(),loadTruck:b=>loadTruck(b),state:()=>state,compare:()=>cmpCalc(),ship:()=>shipCalcAll(),boxFit:()=>bf};
 init();
 })();
 </script>
