@@ -2047,6 +2047,7 @@ let bfStarted=false;
    browser can't copy images). */
 function bfLabelHtml(r){
   const e=esc, logo=new URL("assets/hat-logo.png",location.href).href, when=new Date().toLocaleString();
+  const who=PROFILE&&PROFILE.username?String(PROFILE.username):""; // the signed-in user
   const list=(items,title,sub)=>!items||!items.length?"":`<h2>${title}${sub?` <small>${sub}</small>`:""}</h2>`+items.map((x,i)=>`
     <div class="bx${i===0?" first":""}"><div class="top"><span class="rk">${i+1}</span><b class="nm">${e(x.name)}</b>
       ${x.tight?`<span class="tag">Tighter</span>`:""}<span class="dm">${e(x.dims)} in</span></div>
@@ -2067,7 +2068,10 @@ html,body{margin:0;background:#e4e8ec;color:#1d232b;font-family:"IBM Plex Sans",
 .hd{display:flex;align-items:center;gap:.1in;border-bottom:2px solid #1d232b;padding-bottom:.06in}
 .hd img{height:.42in;width:auto}
 .hd .t{flex:1;min-width:0}
-.hd h1{font:700 1.9em/1 "Barlow Condensed","Arial Narrow",Arial,sans-serif;text-transform:uppercase;letter-spacing:.02em;margin:0}
+.hd h1{font:700 1.9em/1 "Barlow Condensed","Arial Narrow",Arial,sans-serif;text-transform:uppercase;letter-spacing:.02em;margin:0;white-space:nowrap}
+.tl{display:flex;align-items:baseline;gap:.08in;flex-wrap:wrap}
+.desk{font-size:.85em;font-style:italic;color:#5b6672}
+.desk b{font-style:normal;color:#1d232b}
 .hd .d{font-size:.8em;color:#5b6672}
 .tape{height:.09in;margin:0 -.16in;background:repeating-linear-gradient(-45deg,#f2b705 0 .08in,#1d232b .08in .16in)}
 .req{margin:.08in 0 .04in;padding:.06in .08in;border:1.5px solid #1d232b;border-radius:3px}
@@ -2091,7 +2095,7 @@ h2 small{font:400 .7em "IBM Plex Sans",Arial,sans-serif;text-transform:none;lett
 </style></head><body>
 <div class="bar"><button class="primary" id="print" type="button">Print</button><button id="copy" type="button">Copy image</button><button id="close" type="button">Close</button><p id="msg" role="status"></p></div>
 <div class="wrap"><div id="label">
-  <div class="hd"><img src="${logo}" alt="HAT"><div class="t"><h1>Box Finder</h1><div class="d">${e(when)}</div></div></div>
+  <div class="hd"><img src="${logo}" alt="HAT"><div class="t"><div class="tl"><h1>Box Finder</h1>${who?`<span class="desk">From the desk of <b>${e(who)}</b></span>`:""}</div><div class="d">${e(when)}</div></div></div>
   <div class="tape"></div>
   <div class="req"><i>Requested size</i><b>${e(r.search)}</b><div class="c">${fmt(r.fitCount)} of ${fmt(r.total)} boxes in stock fit</div></div>
   ${r.note?`<p class="note">${e(r.note)}</p>`:""}
