@@ -383,7 +383,7 @@ th.opt{text-align:right}
     <p class="sub">Enter a product's size, or the cubic volume you need, and find the closest boxes in stock, smallest first. In a size search the product can be turned any way unless you keep a side up.</p>
   </div>
   <div class="hdr-actions"><button id="bfReload" type="button">Reload inventory</button>
-    <button id="bfLabel" class="primary" type="button">Open 4 × 6 report</button></div>
+    <button id="bfLabel" class="primary" type="button">Report</button></div>
   <p id="bfLabelMsg" class="hint" role="status" hidden></p>
 </header>
 <div class="grid">
@@ -2051,35 +2051,34 @@ function bfLabelHtml(r){
   const list=(items,title,sub)=>!items||!items.length?"":`<h2>${title}${sub?` <small>${sub}</small>`:""}</h2>`+items.map((x,i)=>`
     <div class="bx${i===0?" first":""}"><div class="top"><span class="rk">${i+1}</span><b class="nm">${e(x.name)}</b>
       ${x.tight?`<span class="tag">Tighter</span>`:""}<span class="dm">${e(x.dims)} in</span></div>
-      <div class="kv">${x.rows.map(([k,v])=>`<span><i>${e(k)}</i> ${e(v)}</span>`).join("")}</div></div>`).join("");
+</div>`).join("");
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Box Finder report</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 @page{size:4in 6in;margin:0}
 *{box-sizing:border-box}
-html,body{margin:0;background:#e4e8ec;color:#1d232b;font-family:"IBM Plex Sans",Arial,sans-serif}
+html,body{margin:0;background:#e4e8ec;color:#000;font-family:"IBM Plex Sans",Arial,sans-serif}
 .bar{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:12px 16px;position:sticky;top:0;background:#e4e8ec}
-.bar button{font:600 14px "IBM Plex Sans",Arial,sans-serif;padding:8px 14px;border-radius:6px;border:1px solid #c3cad2;background:#fff;color:#1d232b;cursor:pointer}
+.bar button{font:600 14px "IBM Plex Sans",Arial,sans-serif;padding:8px 14px;border-radius:6px;border:1px solid #c3cad2;background:#fff;color:#000;cursor:pointer}
 .bar button.primary{background:#f2b705;border-color:#d9a404}
-#msg{width:100%;text-align:center;font-size:13px;color:#5b6672;min-height:1em;margin:0}
+#msg{width:100%;text-align:center;font-size:13px;color:#000;min-height:1em;margin:0}
 .wrap{display:flex;justify-content:center;padding:0 16px 24px}
 #label{width:4in;height:6in;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.18);padding:.16in;overflow:hidden;display:flex;flex-direction:column;font-size:var(--fs,10px)}
 .hd{display:flex;align-items:center;gap:.1in;border-bottom:2px solid #1d232b;padding-bottom:.06in}
-.hd img{height:.42in;width:auto}
-.hd .t{flex:1;min-width:0}
+.hd img{height:.36in;width:auto}
+.hd .t{flex:1;min-width:0;text-align:right}
 .hd h1{font:700 1.9em/1 "Barlow Condensed","Arial Narrow",Arial,sans-serif;text-transform:uppercase;letter-spacing:.02em;margin:0;white-space:nowrap}
-.tl{display:flex;align-items:baseline;gap:.08in;flex-wrap:wrap}
-.desk{font-size:.85em;font-style:italic;color:#5b6672}
-.desk b{font-style:normal;color:#1d232b}
-.hd .d{font-size:.8em;color:#5b6672}
+.desk{font-size:.85em;font-style:italic;color:#000}
+.desk b{font-style:normal;color:#000}
+.hd .d{font-size:.8em;color:#000}
 .tape{height:.09in;margin:0 -.16in;background:repeating-linear-gradient(-45deg,#f2b705 0 .08in,#1d232b .08in .16in)}
 .req{margin:.08in 0 .04in;padding:.06in .08in;border:1.5px solid #1d232b;border-radius:3px}
-.req i{display:block;font-style:normal;font-size:.75em;text-transform:uppercase;letter-spacing:.06em;color:#5b6672}
+.req i{display:block;font-style:normal;font-size:.75em;text-transform:uppercase;letter-spacing:.06em;color:#000}
 .req b{font:700 1.45em/1.1 "Barlow Condensed","Arial Narrow",Arial,sans-serif}
-.req .c{font-size:.8em;color:#5b6672}
+.req .c{font-size:.8em;color:#000}
 h2{font:700 1.15em/1 "Barlow Condensed","Arial Narrow",Arial,sans-serif;text-transform:uppercase;letter-spacing:.04em;margin:.09in 0 .03in;border-bottom:1.5px solid #f2b705;padding-bottom:.02in}
-h2 small{font:400 .7em "IBM Plex Sans",Arial,sans-serif;text-transform:none;letter-spacing:0;color:#5b6672}
+h2 small{font:400 .7em "IBM Plex Sans",Arial,sans-serif;text-transform:none;letter-spacing:0;color:#000}
 .bx{padding:.035in 0;border-bottom:1px solid #d3d8de}
 .bx .top{display:flex;align-items:baseline;gap:.05in}
 .rk{display:inline-block;min-width:1.5em;text-align:center;font-weight:600;background:#e4e8ec;border-radius:2px;font-size:.85em}
@@ -2087,28 +2086,25 @@ h2 small{font:400 .7em "IBM Plex Sans",Arial,sans-serif;text-transform:none;lett
 .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dm{font-family:"IBM Plex Mono",monospace;font-weight:500;white-space:nowrap}
 .tag{font-size:.7em;text-transform:uppercase;letter-spacing:.05em;background:#1d232b;color:#fff;padding:0 .3em;border-radius:2px}
-.kv{display:flex;flex-wrap:wrap;gap:0 .12in;padding-left:1.9em;font-size:.85em}
-.kv i{font-style:normal;color:#5b6672}
 .note{font-size:.85em;margin:.05in 0;color:#b4401f}
-.ft{margin-top:auto;padding-top:.05in;font-size:.75em;color:#5b6672;display:flex;justify-content:space-between}
 @media print{html,body{background:#fff}.bar,.wrap>p{display:none}.wrap{padding:0;display:block}#label{box-shadow:none;margin:0}}
 </style></head><body>
 <div class="bar"><button class="primary" id="print" type="button">Print</button><button id="copy" type="button">Copy image</button><button id="close" type="button">Close</button><p id="msg" role="status"></p></div>
 <div class="wrap"><div id="label">
-  <div class="hd"><img src="${logo}" alt="HAT"><div class="t"><div class="tl"><h1>Box Finder</h1>${who?`<span class="desk">From the desk of <b>${e(who)}</b></span>`:""}</div><div class="d">${e(when)}</div></div></div>
+  <div class="hd"><img src="${logo}" alt="HAT"><h1>Box Finder</h1>
+    <div class="t">${who?`<div class="desk">From the desk of <b>${e(who)}</b></div>`:""}<div class="d">${e(when)}</div></div></div>
   <div class="tape"></div>
   <div class="req"><i>Requested size</i><b>${e(r.search)}</b><div class="c">${fmt(r.fitCount)} of ${fmt(r.total)} boxes in stock fit</div></div>
   ${r.note?`<p class="note">${e(r.note)}</p>`:""}
   ${list(r.stock,"Closest boxes in stock","smallest first")}
   ${list(r.uline,"Uline boxes","inside dims")}
-  <div class="ft"><span>Ti:Hi Shipment Builder</span><span>4 × 6</span></div>
 </div></div>
 <script>
 (function(){
   var L=document.getElementById("label"),msg=document.getElementById("msg"),h2c=null;
   function say(t){msg.textContent=t}
   // shrink the type until everything fits on one 4 x 6 label
-  function fit(){var fs=10;L.style.setProperty("--fs",fs+"px");
+  function fit(){var fs=13;L.style.setProperty("--fs",fs+"px");
     while(fs>6&&L.scrollHeight>L.clientHeight+1){fs-=.25;L.style.setProperty("--fs",fs+"px")}}
   fit();window.addEventListener("load",fit);if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fit);
   // the image tool loads in the background so Copy image is quick
