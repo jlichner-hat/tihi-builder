@@ -201,7 +201,7 @@ th.opt{text-align:right}
     <div class="row r2"><label for="userSearch">Search users<input id="userSearch" type="search" placeholder="Name, email or company"></label>
       <label for="userCompany">Company<select id="userCompany"><option value="">All companies</option></select></label></div>
     <p id="userCount" class="hint"></p>
-    <p class="hint">Admins manage roles and see every page. Packaging engineers also see Compare box sizes and Box finder. Users see the Shipment builder only.</p>
+    <p class="hint">Admins manage roles and see every page. Packaging engineers also see Compare box sizes, China shipping and Box finder. Users see the Shipment builder only.</p>
     <p id="roleMsg" class="hint" role="status" hidden></p>
     <div class="tablewrap"><table><thead><tr><th>Username</th><th>Email</th><th>Company</th><th>Role</th><th>Joined</th></tr></thead><tbody id="userRows"></tbody></table></div>
   </div>
@@ -209,6 +209,7 @@ th.opt{text-align:right}
 <nav class="tabs pagenav" aria-label="Pages" hidden>
   <button type="button" data-page="builder" aria-pressed="true">Shipment builder</button>
   <button type="button" data-page="compare" aria-pressed="false" hidden>Compare box sizes</button>
+  <button type="button" data-page="ship" aria-pressed="false" hidden>China shipping</button>
   <button type="button" data-page="boxes" aria-pressed="false" hidden>Box finder</button>
 </nav>
 <div id="builderPage" class="col" style="gap:20px">
@@ -335,6 +336,33 @@ th.opt{text-align:right}
     </section>
   </div>
   <div class="col" id="cmpResults" aria-live="polite"></div>
+</div>
+</div>
+
+<!-- CHINA SHIPPING -->
+<div id="shipPage" class="col" style="gap:20px" hidden>
+<header>
+  <div>
+    <h1>China shipping</h1>
+    <p class="sub">See what the box sizes on Compare box sizes mean for an order shipped from China to HAT: how many pallet locations each box needs and what that costs.</p>
+  </div>
+</header>
+<div class="grid">
+  <div class="col">
+    <section class="panel" aria-labelledby="shipInH">
+      <div class="panel-head"><div><div class="step">Step 1</div><h2 id="shipInH">Order</h2></div></div>
+      <label for="shipQty">Estimated item order quantity<input id="shipQty" type="number" min="0" step="1" placeholder="e.g. 50000"></label>
+      <label for="shipFee">Estimated pallet location shipping fee ($)<input id="shipFee" type="number" min="0" step="0.01" placeholder="e.g. 85.00"></label>
+      <label for="shipBase">Compare savings against<select id="shipBase"></select></label>
+      <p class="hint">Order quantity is in items, the same units as Units per box on Compare box sizes. The fee is the estimated cost to ship one pallet location.</p>
+    </section>
+    <section class="panel" aria-labelledby="shipBoxH">
+      <div class="panel-head"><div><div class="step">Step 2</div><h2 id="shipBoxH">Box sizes</h2></div>
+        <a href="#compare">Edit on Compare box sizes</a></div>
+      <div id="shipBoxes" class="col" style="gap:6px"></div>
+    </section>
+  </div>
+  <div class="col" id="shipResults" aria-live="polite"></div>
 </div>
 </div>
 
@@ -1090,7 +1118,7 @@ function renderUsers(){
     :`<tr><td colspan="5" class="hint">No users match.</td></tr>`;
 }
 /* Roles: User (member) sees the Shipment builder; Packaging engineer (engineer) also sees
-   Compare box sizes and Box finder; Admin (company_admin) sees everything and sets roles.
+   Compare box sizes, China shipping and Box finder; Admin (company_admin) sees everything and sets roles.
    Site admins (app_admins) can do everything for every company. */
 const ROLES=[["member","User"],["engineer","Packaging engineer"],["company_admin","Admin"]];
 const roleName=r=>(ROLES.find(x=>x[0]===r)||[,"User"])[1];
@@ -1362,7 +1390,79 @@ function cmpRenderResults(){
   h+=`</div></section>`;
   $("cmpResults").innerHTML=h;
 }
-function cmpRerender(){try{cmpRenderResults()}catch(e){$("cmpResults").innerHTML=`<div class="alert">Couldn't calculate: ${esc(e.message)}</div>`}}
+function cmpRerender(){try{cmpRenderResults()}catch(e){$("cmpResults").innerHTML=`<div class="alert">Couldn't calculate: ${esc(e.message)}</div>`}
+  shipRerender()}
+
+/* ---------- CHINA SHIPPING (uses the Compare box sizes boxes and pallet) ---------- */
+const ship={qty:0,fee:0,base:-1}; // base -1 = the box that needs the most pallet locations
+const money=v=>"$"+Number(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+function shipCalc(){
+  const C=cmpCalc(), qty=Math.max(0,Math.floor(num(ship.qty))), fee=Math.max(0,num(ship.fee));
+  const rows=C.rows.map(x=>x.err?x:{...x,locs:qty>0?Math.ceil(qty/x.unitsPP):0,cost:qty>0?Math.ceil(qty/x.unitsPP)*fee:0});
+  const ok=rows.filter(x=>!x.err);
+  const worst=[...ok].sort((a,b)=>(b.locs-a.locs)||(a.unitsPP-b.unitsPP)||(a.i-b.i))[0]||null;
+  const base=ship.base<0?worst:(ok.find(x=>x.i===ship.base)||worst);
+  ok.forEach(x=>{x.saveLocs=base?base.locs-x.locs:0;x.save=base?base.cost-x.cost:0});
+  const best=[...ok].sort((a,b)=>(a.locs-b.locs)||(b.unitsPP-a.unitsPP)||(a.i-b.i))[0]||null;
+  return {C,qty,fee,rows,ok,base,best};
+}
+function shipRenderInputs(){
+  const opts=`<option value="-1">The box needing the most pallet locations</option>`+cmp.boxes.map((b,i)=>`<option value="${i}">${esc(b.name||"Box "+LETTERS[i])}</option>`).join("");
+  if(ship.base>=cmp.boxes.length)ship.base=-1;
+  $("shipBase").innerHTML=opts;$("shipBase").value=String(ship.base);
+  $("shipQty").value=ship.qty||"";$("shipFee").value=ship.fee||"";
+}
+function shipRenderResults(){
+  shipRenderInputs();
+  const S=shipCalc(), {C,qty,fee,ok,base,best}=S;
+  $("shipBoxes").innerHTML=cmp.boxes.map((b,i)=>`<div class="cmpbar" style="grid-template-columns:minmax(0,1fr) auto"><span class="nm"><i class="swatch" style="background:${color(i)}"></i>${esc(b.name)}</span>
+    <span class="val">${b.L} × ${b.W} × ${b.H} in · ${fmt(Math.max(1,Math.floor(num(b.units,1))))}/box</span></div>`).join("")+
+    `<p class="hint">Pallet: ${esc(C.p.name)}, ${fmt(cmp.stackH,1)} in max stack height.</p>`;
+  let h="";
+  S.rows.filter(x=>x.err).forEach(x=>{h+=`<div class="alert"><b>${esc(x.b.name)}:</b> ${x.err}</div>`});
+  if(!ok.length){$("shipResults").innerHTML=h||`<div class="alert">Add box sizes on Compare box sizes first.</div>`;return}
+  if(!(qty>0)){$("shipResults").innerHTML=h+`<div class="alert">Enter the estimated item order quantity to see pallet locations and cost.</div>`;return}
+  const word=cmp.item.trim()?"units of "+esc(cmp.item.trim()):"units";
+  let verdict;
+  const others=ok.filter(x=>x!==best);
+  if(!others.length) verdict=`<b>${esc(best.b.name)}</b> needs ${fmt(best.locs)} pallet location${best.locs===1?"":"s"} for ${fmt(qty)} ${word}${fee>0?`, about ${money(best.cost)}`:""}.`;
+  else if(best.saveLocs>0) verdict=`<b>${esc(best.b.name)}</b> needs the fewest pallet locations: ${fmt(best.locs)} for ${fmt(qty)} ${word}. That is ${fmt(best.saveLocs)} fewer than ${esc(base.b.name)}${fee>0?`, an estimated savings of <b>${money(best.save)}</b>`:""}.`;
+  else if(best===base) verdict=`<b>${esc(base.b.name)}</b> already needs the fewest pallet locations (${fmt(base.locs)}). No other box size saves money on this order.`;
+  else verdict=`<b>${esc(best.b.name)}</b> and <b>${esc(base.b.name)}</b> both need ${fmt(best.locs)} pallet locations, so there is no savings on this order.`;
+  const maxL=Math.max(...ok.map(x=>x.locs),1);
+  h+=`<section class="panel"><div class="panel-head"><h2>Result</h2><span class="hint">${fmt(qty)} ${word}${fee>0?` · ${money(fee)} per pallet location`:""}</span></div>
+    <p class="verdict">${verdict}</p>
+    <div class="cmpbars">${[...ok].sort((a,b)=>a.i-b.i).map(x=>`<div class="cmpbar"><span class="nm"><i class="swatch" style="background:${color(x.i)}"></i>${esc(x.b.name)}</span>
+      <div class="bar"><i style="width:${x.locs/maxL*100}%;background:${color(x.i)}"></i></div>
+      <span class="val">${fmt(x.locs)} location${x.locs===1?"":"s"}</span></div>`).join("")}</div>
+    ${fee>0?"":`<p class="hint">Enter the pallet location shipping fee to see estimated cost and savings.</p>`}
+  </section>`;
+  const cols=S.rows, cell=(x,fn)=>x.err?"–":fn(x);
+  const lo=k=>Math.min(...ok.map(x=>x[k])), hi=k=>Math.max(...ok.map(x=>x[k]));
+  const isBest=(x,k,dir)=>!x.err&&lo(k)!==hi(k)&&x[k]===(dir>0?hi(k):lo(k));
+  const row=(label,fn,k,dir)=>`<tr><th scope="row">${label}</th>${cols.map(x=>`<td class="n${k&&isBest(x,k,dir)?" best":""}">${cell(x,fn)}</td>`).join("")}</tr>`;
+  const signed=(v,f)=>v>0?f(v):v<0?"−"+f(-v):f(0);
+  h+=`<section class="panel"><div class="panel-head"><h2>Side by side</h2><span class="hint">Savings are against ${esc(base.b.name)}. Underlined = best in that row</span></div>
+   <div class="tablewrap"><table><thead><tr><th></th>${cols.map(x=>`<th class="opt"><span style="display:inline-flex;align-items:center;gap:6px"><i class="swatch" style="background:${color(x.i)}"></i>${esc(x.b.name)}</span></th>`).join("")}</tr></thead><tbody>
+   ${row("Box size L × W × H in",x=>`${x.b.L} × ${x.b.W} × ${x.b.H}`)}
+   ${row("Units per box",x=>fmt(x.units))}
+   ${row("Ti:Hi",x=>`${x.r.ti}:${x.r.hi}`)}
+   ${row("Units per pallet",x=>fmt(x.unitsPP),"unitsPP",1)}
+   ${row("Boxes to ship",x=>fmt(Math.ceil(qty/x.units)))}
+   ${row("Pallet locations needed",x=>`<b>${fmt(x.locs)}</b>`,"locs",-1)}
+   ${row("Last pallet fill",x=>{const r=qty-(x.locs-1)*x.unitsPP;return fmt(r/x.unitsPP*100,0)+"%"})}
+   ${fee>0?row("Estimated shipping cost",x=>money(x.cost),"cost",-1):""}
+   ${row("Pallet locations saved",x=>signed(x.saveLocs,fmt),"saveLocs",1)}
+   ${fee>0?row("Estimated cost savings",x=>signed(x.save,money),"save",1):""}
+   ${fee>0?row("Shipping cost per item",x=>"$"+(x.cost/qty).toFixed(4),"cost",-1):""}
+   </tbody></table></div>
+   <p class="hint">Pallet locations = order quantity ÷ units per pallet, rounded up. Units per pallet come from Compare box sizes, using its pallet and stack height. A negative savings means that box costs more than ${esc(base.b.name)}.</p></section>`;
+  $("shipResults").innerHTML=h;
+}
+function shipRerender(){try{shipRenderResults()}catch(e){$("shipResults").innerHTML=`<div class="alert">Couldn't calculate: ${esc(e.message)}</div>`}}
+$("shipQty").addEventListener("input",e=>{ship.qty=num(e.target.value);shipRerender()});
+$("shipFee").addEventListener("input",e=>{ship.fee=num(e.target.value);shipRerender()});
+$("shipBase").addEventListener("change",e=>{ship.base=+e.target.value;shipRerender()});
 $("cmpList").addEventListener("input",e=>{
   const it=e.target.closest(".item"),f=e.target.dataset.f;if(!it||!f)return;
   const n=+it.dataset.i,b=cmp.boxes[n];
@@ -1771,7 +1871,7 @@ $("bfFile").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)
 let bfStarted=false;
 
 /* ---------- PAGES ---------- */
-const PAGE_OK={builder:()=>true,compare:canBoxTools,boxes:canBoxTools};
+const PAGE_OK={builder:()=>true,compare:canBoxTools,ship:canBoxTools,boxes:canBoxTools};
 function applyRole(){
   const ok=canBoxTools();
   document.querySelectorAll(".pagenav button").forEach(b=>b.hidden=!PAGE_OK[b.dataset.page]());
@@ -1783,11 +1883,11 @@ function showPage(pg){
   if(!PAGE_OK[pg]()){
     // Not allowed for this role (or still signing in): show the builder but keep the link,
     // so #boxes still opens once an engineer's account has loaded.
-    $("builderPage").hidden=false;$("comparePage").hidden=true;$("boxesPage").hidden=true;
+    $("builderPage").hidden=false;$("comparePage").hidden=true;$("shipPage").hidden=true;$("boxesPage").hidden=true;
     document.querySelectorAll(".pagenav button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.page==="builder"));
     if(PROFILE&&location.hash)history.replaceState(null,"",location.pathname+location.search);
     return}
-  $("builderPage").hidden=pg!=="builder";$("comparePage").hidden=pg!=="compare";$("boxesPage").hidden=pg!=="boxes";
+  $("builderPage").hidden=pg!=="builder";$("comparePage").hidden=pg!=="compare";$("shipPage").hidden=pg!=="ship";$("boxesPage").hidden=pg!=="boxes";
   if(pg==="boxes"&&!bfStarted){bfStarted=true;bfInit()}
   document.querySelectorAll(".pagenav button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.page===pg));
   const want=pg==="builder"?"":"#"+pg;
@@ -1797,7 +1897,7 @@ document.querySelector(".pagenav").addEventListener("click",e=>{const pg=e.targe
 window.addEventListener("hashchange",()=>showPage(location.hash.slice(1)));
 cmpRenderInputs();cmpRerender();showPage(location.hash.slice(1));
 
-window.__tihi={layerPattern,plan:()=>plan(),loadTruck:b=>loadTruck(b),state:()=>state,compare:()=>cmpCalc(),boxFit:()=>bf};
+window.__tihi={layerPattern,plan:()=>plan(),loadTruck:b=>loadTruck(b),state:()=>state,compare:()=>cmpCalc(),ship:()=>shipCalc(),boxFit:()=>bf};
 init();
 })();
 </script>
