@@ -360,7 +360,7 @@ th.opt{text-align:right}
         <button id="shipQAdd" type="button">+ Add quantity</button></div>
       <div id="shipQtys" class="col" style="gap:8px"></div>
       <label for="shipFee">Estimated pallet location shipping fee ($)<input id="shipFee" type="number" min="0" step="0.01" placeholder="e.g. 85.00"></label>
-      <label for="shipStore">Pallet location storage fee ($ per pallet per month)<input id="shipStore" type="number" min="0" step="0.01" placeholder="e.g. 18.00"></label>
+      <label for="shipStore">Pallet location storage fee ($ per pallet per month)<input id="shipStore" type="number" min="0" step="0.01" placeholder="12.99"></label>
       <label for="shipMonths">Months in storage<input id="shipMonths" type="number" min="0" step="0.5" placeholder="1"></label>
       <label for="shipBase">Compare savings against<select id="shipBase"></select></label>
       <p class="hint">Each order quantity is compared separately. Quantities are in items, the same units as Units per box on Compare box sizes. The shipping fee is the estimated cost to ship one pallet location. The storage fee is what we count for keeping one pallet in our building for a month; months in storage defaults to 1.</p>
@@ -1426,7 +1426,7 @@ function cmpRerender(){try{cmpRenderResults()}catch(e){$("cmpResults").innerHTML
 
 /* ---------- SHIPPING COMPARISON (uses the Compare box sizes boxes and pallet) ---------- */
 const SHIP_QMIN=3, SHIP_QMAX=8;
-const ship={qtys:[0,0,0],fee:0,store:0,months:1,base:-1}; // base -1 = the box that needs the most pallet locations
+const ship={qtys:[0,0,0],fee:0,store:12.99,months:1,base:-1}; // base -1 = the box that needs the most pallet locations
 const monthsTxt=m=>`${fmt(m,m%1?1:0)} month${m===1?"":"s"}`;
 const money=v=>"$"+Number(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 function shipFees(){
