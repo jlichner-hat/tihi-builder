@@ -257,6 +257,8 @@ th.opt{text-align:right}
       </div>
       <label class="check" for="stackInclPallet"><input id="stackInclPallet" type="checkbox"> Stack height includes the pallet itself</label>
       <label class="check" for="allowTip"><input id="allowTip" type="checkbox"> Packages may be placed on their side</label>
+      <label class="check" for="comingle"><input id="comingle" type="checkbox"> Commingle items on pallets</label>
+      <p class="hint" style="margin-top:-4px">Off: each item gets its own full pallets and only leftovers are mixed. On: every pallet is built from layers of several items, which can also cut the pallet count.</p>
       <label for="mixPallet">Pallet for mixed (leftover) loads
         <select id="mixPallet"></select></label>
     </section>
@@ -450,7 +452,7 @@ const EXAMPLE={
     {name:"Case B",L:24,W:16,H:12,wt:40,qty:300,pallet:"auto"},
     {name:"Case C",L:12,W:10,H:8,wt:12,qty:500,pallet:"auto"}],
   pallets:[{id:"p0",name:"GMA 48 × 40",L:48,W:40,H:5.5,tare:45,max:2500,fixed:true}],
-  stackH:52,overhang:0,stackInclPallet:true,allowTip:false,mixPallet:"p0",
+  stackH:52,overhang:0,stackInclPallet:true,allowTip:false,mixPallet:"p0",comingle:false,
   truck:"53",tL:630,tW:98.5,tH:108,tMax:45000,dbl:false
 };
 let state=JSON.parse(JSON.stringify(EXAMPLE));
@@ -537,6 +539,9 @@ function plan(){
     if(!best||best.cases<1){out.warnings.push(`${esc(s.name)} doesn't fit on any pallet with the current stack height or weight limit.`);continue}
     if(best.hi<1) out.warnings.push(`${esc(s.name)}: a full layer would exceed the pallet's weight limit, so pallets get a partial layer.`);
     const qty=Math.max(0,Math.floor(s.qty));
+    if(state.comingle){const mr=(best.pallet===mixP)?best:tiHi(s,mixP);
+      if(mr&&mr.ti>=1&&mr.cases>=1){rec.mixAll=true;if(qty>0)remLayers.push(...splitLayers(s,qty,mr));continue}
+      out.warnings.push(`${esc(s.name)} doesn't fit the mixed-load pallet, so it was not commingled.`);}
     rec.full=Math.floor(qty/best.cases); rec.rem=qty-rec.full*best.cases;
     for(let k=0;k<rec.full;k++) out.built.push({type:"full",pallet:best.pallet,layers:Array.from({length:best.hi},()=>({sku:s,cases:best.ti,h:best.h,res:best})).concat(best.cases>best.ti*best.hi?[{sku:s,cases:best.cases-best.ti*best.hi,h:best.h,res:best}]:[])});
     if(rec.rem>0){
@@ -555,6 +560,20 @@ function plan(){
     let tgt=mixed.find(m=>m.h+ly.h<=availMix+1e-9&&(!mixP.max||m.wt+lw<=mixP.max));
     if(!tgt){tgt={type:"mixed",pallet:mixP,layers:[],h:0,wt:0};mixed.push(tgt)}
     tgt.layers.push(ly);tgt.h+=ly.h;tgt.wt+=lw;
+  }
+  if(state.comingle&&mixed.length>1){
+    // Deal layers out so each pallet carries a share of every item. Try the first-fit pallet count, then up to 2 more.
+    const fits=(m,ly)=>m.h+ly.h<=availMix+1e-9&&(!mixP.max||m.wt+ly.cases*ly.sku.wt<=mixP.max);
+    const order=remLayers.slice().sort((a,b)=>(b.h-a.h)||(b.cases*b.sku.wt-a.cases*a.sku.wt));
+    const deal=n=>{const bal=Array.from({length:n},()=>({type:"mixed",pallet:mixP,layers:[],h:0,wt:0,cnt:{}}));
+      for(const ly of order){const k=ly.sku.idx, c=bal.filter(m=>fits(m,ly));
+        if(!c.length)return null;
+        c.sort((a,b)=>((a.cnt[k]||0)-(b.cnt[k]||0))||(b.h-a.h));
+        const t=c[0];t.layers.push(ly);t.h+=ly.h;t.wt+=ly.cases*ly.sku.wt;t.cnt[k]=(t.cnt[k]||0)+1;}
+      return bal;};
+    let bal=null;for(let n=mixed.length;n<=mixed.length+2&&!bal;n++)bal=deal(n);
+    if(bal){bal.forEach(m=>{delete m.cnt;m.layers.sort((a,b)=>(b.full-a.full)||(b.cases*b.sku.wt-a.cases*a.sku.wt))});const key=m=>m.layers.map(l=>l.sku.idx+":"+l.cases).join(",");
+      mixed.splice(0,mixed.length,...bal.filter(m=>m.layers.length).sort((a,b)=>key(a)<key(b)?-1:key(a)>key(b)?1:0))}
   }
   mixed.forEach(m=>{const kinds=new Set(m.layers.map(l=>l.sku.idx));if(kinds.size===1)m.type="partial";out.built.push(m)});
   out.built.forEach((b,i)=>{b.id=i+1;b.loadH=b.layers.reduce((a,l)=>a+l.h,0);b.height=b.loadH+b.pallet.H;
@@ -658,7 +677,7 @@ function renderPallets(){
 }
 function syncGlobals(){
   $("pkgCount").value=state.packages.length;$("stackH").value=state.stackH;$("overhang").value=state.overhang;
-  $("stackInclPallet").checked=state.stackInclPallet;$("allowTip").checked=state.allowTip;
+  $("stackInclPallet").checked=state.stackInclPallet;$("allowTip").checked=state.allowTip;$("comingle").checked=!!state.comingle;
   $("truckPreset").value=state.truck;$("tL").value=state.tL;$("tW").value=state.tW;$("tH").value=state.tH;$("tMax").value=state.tMax;$("dbl").checked=state.dbl;
 }
 
@@ -747,7 +766,7 @@ function truckSVG(T,t,ti){
 /* ---------- RENDER: results ---------- */
 function groupBuilt(built){const rows=[];
   for(const b of built){const prev=rows[rows.length-1];
-    const sig=b.type==="full"?b.pallet.id+"|"+b.layers.map(l=>l.sku.idx+":"+l.cases).join(","):null;
+    const sig=b.type+"|"+b.pallet.id+"|"+b.layers.map(l=>l.sku.idx+":"+l.cases).join(",");
     if(sig&&prev&&prev.sig===sig){prev.list.push(b)}else rows.push({sig,list:[b]})}
   return rows}
 function renderResults(){
@@ -785,7 +804,7 @@ function renderResults(){
         <dt>Pallet height</dt><dd>${fmt(res.pallet.H+res.hi*res.h,1)} in</dd>
         <dt>Pallet weight</dt><dd>${fmt(res.cases*s.wt+res.pallet.tare)} lb</dd>
         <dt>Limited by</dt><dd>${res.limitedBy==="weight"?'<span class="pill warn">weight</span>':"height"}</dd>
-        <dt>${fmt(s.qty)} to ship</dt><dd>${r.full} full + ${fmt(r.rem)} left over</dd>
+        <dt>${fmt(s.qty)} to ship</dt><dd>${r.mixAll?"commingled on mixed pallets":`${r.full} full + ${fmt(r.rem)} left over`}</dd>
       </dl></div>`;
   }
   h+=`</div></section>`;
@@ -927,13 +946,13 @@ async function buildPdf(){
     doc.setFont("helvetica","bold");doc.setFontSize(17);doc.setTextColor(...ink);doc.text(String(v),x+8,y+34)});
   y+=62;
   doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...muted);
-  const settings=`Max stack height ${state.stackH} in ${state.stackInclPallet?"(includes pallet)":"(product only, pallet added)"}  \u00b7  Overhang ${state.overhang} in/side  \u00b7  ${state.allowTip?"Items may lie on side":"Items kept upright"}  \u00b7  Truck ${fmt(state.tL/12,1)} ft x ${state.tW} x ${state.tH} in, max ${fmt(state.tMax)} lb  \u00b7  ${state.dbl?"Double-stacking allowed":"Single-stacked"}`;
+  const settings=`Max stack height ${state.stackH} in ${state.stackInclPallet?"(includes pallet)":"(product only, pallet added)"}  \u00b7  Overhang ${state.overhang} in/side  \u00b7  ${state.allowTip?"Items may lie on side":"Items kept upright"}${state.comingle?"  \u00b7  Items commingled on pallets":""}  \u00b7  Truck ${fmt(state.tL/12,1)} ft x ${state.tW} x ${state.tH} in, max ${fmt(state.tMax)} lb  \u00b7  ${state.dbl?"Double-stacking allowed":"Single-stacked"}`;
   const lines=doc.splitTextToSize(settings,CW);doc.text(lines,M,y);y+=lines.length*11+8;
   heading("Items and Ti:Hi");
   doc.autoTable({startY:y,margin:{left:M,right:M},theme:"grid",styles:{fontSize:8.5,cellPadding:4,textColor:ink,lineColor:[211,216,222]},
     headStyles:{fillColor:[29,35,43],textColor:255,fontStyle:"bold"},
     head:[["Item","L x W x H in","Wt lb","Qty","Pallet","Ti","Hi","Per pallet","Full","Left over"]],
-    body:R.skus.map(r=>{const s=r.sku,x=r.res;return [s.name,`${s.L} x ${s.W} x ${s.H}`,fmt(s.wt,1),fmt(s.qty),x?x.pallet.name:"-",x?x.ti:"-",x?x.hi:"-",x?x.cases:"-",r.full,fmt(r.rem)]}),
+    body:R.skus.map(r=>{const s=r.sku,x=r.res;return [s.name,`${s.L} x ${s.W} x ${s.H}`,fmt(s.wt,1),fmt(s.qty),x?x.pallet.name:"-",x?x.ti:"-",x?x.hi:"-",x?x.cases:"-",r.mixAll?"-":r.full,r.mixAll?"mixed":fmt(r.rem)]}),
     columnStyles:{2:{halign:"right"},3:{halign:"right"},5:{halign:"right"},6:{halign:"right"},7:{halign:"right"},8:{halign:"right"},9:{halign:"right"}}});
   y=doc.lastAutoTable.finalY+16;
   // Layer patterns, 3 per row
@@ -1286,6 +1305,7 @@ const bindTruckNum=(id,key)=>$(id).addEventListener("input",e=>{state[key]=num(e
 bindTruckNum("tL","tL");bindTruckNum("tW","tW");bindTruckNum("tH","tH");bindTruckNum("tMax","tMax");
 $("stackInclPallet").addEventListener("change",e=>{state.stackInclPallet=e.target.checked;rerender()});
 $("allowTip").addEventListener("change",e=>{state.allowTip=e.target.checked;rerender()});
+$("comingle").addEventListener("change",e=>{state.comingle=e.target.checked;rerender()});
 $("dbl").addEventListener("change",e=>{state.dbl=e.target.checked;rerender()});
 $("mixPallet").addEventListener("change",e=>{state.mixPallet=e.target.value;rerender()});
 $("truckPreset").addEventListener("change",e=>{state.truck=e.target.value;const t=TRUCKS[e.target.value];
