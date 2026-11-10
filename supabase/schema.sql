@@ -60,6 +60,13 @@ language sql stable security definer set search_path = public, extensions as $$
   select exists (select 1 from public.app_admins where user_id = auth.uid())
 $$;
 
+-- Packaging engineers and Admins (and site admins) can change or delete saved items; Users can only add them.
+create or replace function public.can_manage_items() returns boolean
+language sql stable security definer set search_path = public, extensions as $$
+  select public.is_app_admin() or exists (select 1 from public.profiles
+    where id = auth.uid() and role in ('engineer','company_admin'))
+$$;
+
 -- On sign-up: match the email domain to a company (or create a pending one) and make the profile.
 -- Accounts created by hand in the Supabase dashboard have no username or company:
 -- the email name becomes the username and the email domain picks the company.
@@ -143,10 +150,11 @@ create policy "company items insert" on public.items for insert to authenticated
   with check (company_id = (select public.my_company_id()));
 drop policy if exists "company items update" on public.items;
 create policy "company items update" on public.items for update to authenticated
-  using (company_id = (select public.my_company_id())) with check (company_id = (select public.my_company_id()));
+  using (company_id = (select public.my_company_id()) and (select public.can_manage_items()))
+  with check (company_id = (select public.my_company_id()));
 drop policy if exists "company items delete" on public.items;
 create policy "company items delete" on public.items for delete to authenticated
-  using (company_id = (select public.my_company_id()));
+  using (company_id = (select public.my_company_id()) and (select public.can_manage_items()));
 
 drop policy if exists "see own admin row" on public.app_admins;
 create policy "see own admin row" on public.app_admins for select to authenticated
@@ -157,6 +165,8 @@ create policy "see own admin row" on public.app_admins for select to authenticat
 revoke execute on function public.handle_new_user() from public, anon, authenticated;
 revoke execute on function public.set_company_status(uuid, text) from public, anon;
 grant execute on function public.set_company_status(uuid, text) to authenticated;
+revoke execute on function public.can_manage_items() from public, anon;
+grant execute on function public.can_manage_items() to authenticated;
 -- Admins set roles: User (member), Packaging engineer (engineer), Admin (company_admin).
 create or replace function public.set_user_role(uid uuid, new_role text) returns void
 language plpgsql security definer set search_path = public, extensions as $$
