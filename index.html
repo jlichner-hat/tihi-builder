@@ -1516,12 +1516,13 @@ $("cmpExample").addEventListener("click",()=>{cmp=JSON.parse(JSON.stringify(CMP_
 
 
 /* ---------- COMPARE PDF REPORT ---------- */
-async function buildCmpPdf(){
+async function buildCmpPdf(into){ // into: an open report to append these pages to (used by Shipping Comparison)
   const C=cmpCalc(), ok=C.ranked; const {jsPDF}=window.jspdf;
   if(!ok.length) throw new Error("No box fits on the pallet yet, so there's nothing to report.");
   const unitWord=cmp.boxes.every(b=>Math.max(1,Math.floor(num(b.units,1)))===1)?"boxes":"units";
   const item=cmp.item.trim();
-  const doc=new jsPDF({unit:"pt",format:"letter"}); const PW=612,PH=792,M=40,CW=PW-2*M;
+  const doc=into||new jsPDF({unit:"pt",format:"letter"}); const PW=612,PH=792,M=40,CW=PW-2*M;
+  if(into)doc.addPage();
   let y=M; const ink=[29,35,43],muted=[91,102,114];
   const need=h=>{if(y+h>PH-M){doc.addPage();y=M}};
   const heading=(t,next=0)=>{need(40+next);y+=6;doc.setFont("helvetica","bold");doc.setFontSize(13);doc.setTextColor(...ink);doc.text(t.toUpperCase(),M,y+12);
@@ -1607,7 +1608,7 @@ async function buildCmpPdf(){
     });
     y+=bh+12;
   }
-  pdfFooter(doc,`Box Size Comparison  ·  ${date}`,PW,PH,M);
+  if(!into)pdfFooter(doc,`Box Size Comparison  ·  ${date}`,PW,PH,M);
   return doc;
 }
 window.__tihi_cmp_pdf=async()=>(await buildCmpPdf()).output("blob");
@@ -1680,6 +1681,8 @@ async function buildShipPdf(){
   doc.text(note,M,y+8);y+=note.length*10+14;
   const errs=cols.filter(x=>x.err);
   if(errs.length){doc.setTextColor(180,64,31);errs.forEach(x=>{doc.text(`${x.b.name}: ${x.err}`,M,y);y+=12})}
+  // The full box size comparison follows, so the report shows how each box packs as well as what it costs to ship.
+  await buildCmpPdf(doc);
   pdfFooter(doc,`Shipping Comparison  ·  ${date}`,PW,PH,M);
   return doc;
 }
