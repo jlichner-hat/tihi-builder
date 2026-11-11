@@ -2283,7 +2283,6 @@ html,body{margin:0;background:${preview?"#fff":"#e4e8ec"};color:#000;font-family
 .it{font-size:.42in;font-weight:900;letter-spacing:.01em;margin-top:.04in}
 .info{margin-top:auto;font-size:.15in;line-height:1.45}
 .info b{font-weight:700}
-.info .gap{margin-top:.06in}
 .info .last{display:flex;justify-content:space-between;gap:.1in}
 @media print{html,body{background:#fff}.bar{display:none}.wrap{padding:0;display:block}#label{box-shadow:none;margin:0}}
 </style></head><body>
@@ -2301,7 +2300,7 @@ ${preview?"":`<div class="bar"><button class="primary" id="print" type="button">
   <div class="info">
     <div><b>Item:</b> ${e(r.item)}</div>
     <div><b>Job#</b> ${e(r.job)}</div>
-    <div class="gap"><b>Date of Manufacture:</b> ${e(r.date)}</div>
+    <div><b>Date of Manufacture:</b> ${e(r.date)}</div>
     <div class="last"><span><b>Country of Origin:</b> ${e(r.origin)}</span>${r.wt?`<span><b>Weight:</b> ${e(r.wt)}</span>`:""}</div>
   </div>
 </div></div>
