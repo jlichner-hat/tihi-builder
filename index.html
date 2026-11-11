@@ -213,7 +213,7 @@ th.opt{text-align:right}
   <button type="button" data-page="compare" aria-pressed="false" hidden>Compare box sizes</button>
   <button type="button" data-page="ship" aria-pressed="false" hidden>Shipping Comparison</button>
   <button type="button" data-page="boxes" aria-pressed="false" hidden>Box finder</button>
-  <button type="button" data-page="labels" aria-pressed="false" hidden>Second box labels</button>
+  <button type="button" data-page="labels" aria-pressed="false" hidden>Multi box label</button>
 </nav>
 <div id="builderPage" class="col" style="gap:20px">
 <header>
@@ -438,11 +438,11 @@ th.opt{text-align:right}
 </div>
 </div>
 
-<!-- SECOND BOX LABELS -->
+<!-- MULTI BOX LABEL -->
 <div id="labelsPage" class="col" style="gap:20px" hidden>
 <header>
   <div>
-    <h1>Second box labels</h1>
+    <h1>Multi box label</h1>
     <p class="sub">Make the 4 × 6 label for an item that ships in more than one box. Fill in the item and job, check the preview, then print.</p>
   </div>
   <div class="hdr-actions"><button id="lbPrint" class="primary" type="button">Print label</button></div>
@@ -454,8 +454,21 @@ th.opt{text-align:right}
       <div class="panel-head"><div><div class="step">Step 1</div><h2 id="lbInH">Label details</h2></div>
         <button id="lbClear" type="button" class="linkbtn">Clear</button></div>
       <form id="lbForm" class="col" style="gap:12px" novalidate>
-        <label for="lbItem">Item number<input id="lbItem" type="text" autocomplete="off" spellcheck="false" placeholder="E5G-P33SS-BLK"></label>
+        <div class="lib">
+          <div class="lib-row">
+            <label for="lbSel">Saved items<select id="lbSel" disabled><option>Sign in to see saved items</option></select></label>
+            <button id="lbUse" type="button" disabled>Use</button>
+          </div>
+          <details id="lbManage" hidden><summary>Manage saved items</summary><div id="lbList" class="col"></div></details>
+          <p id="lbLibMsg" class="hint" role="status">Save an item to keep its number, description and weight for your company. Typing a saved item number fills in the rest.</p>
+        </div>
+        <datalist id="lbNames"></datalist>
+        <label for="lbItem">Item number<input id="lbItem" type="text" list="lbNames" autocomplete="off" spellcheck="false" placeholder="E5G-P33SS-BLK"></label>
         <label for="lbDesc">Description<input id="lbDesc" type="text" autocomplete="off" placeholder="E5 3 Over 3 Static Pole - Black"></label>
+        <div class="row r2" style="align-items:end">
+          <label for="lbWt">Weight (lb)<input id="lbWt" type="number" min="0" step="0.1" placeholder="12.5"></label>
+          <button id="lbSave" type="button" disabled>Save item</button>
+        </div>
         <label for="lbJob">Job number<input id="lbJob" type="text" autocomplete="off" spellcheck="false" placeholder="A000671691"></label>
         <div class="row r2">
           <label for="lbBox">Box<input id="lbBox" type="number" min="1" step="1" value="2"></label>
@@ -463,7 +476,7 @@ th.opt{text-align:right}
         </div>
         <label for="lbDate">Date of manufacture<input id="lbDate" type="date"></label>
         <label for="lbOrigin">Country of origin<input id="lbOrigin" type="text" value="USA" autocomplete="off"></label>
-        <p class="hint">Date of manufacture starts at today. The top half of the label prints upside down, the same as the old Publisher label, so it reads right from either end of the box. In the print window, pick the 4 × 6 label printer and set margins to None if it asks.</p>
+        <p class="hint">Weight prints at the bottom right, on the Country of Origin line, and is left off if blank. Date of manufacture starts at today. The top half of the label prints upside down, the same as the old Publisher label, so it reads right from either end of the box. In the print window, pick the 4 × 6 label printer and set margins to None if it asks.</p>
       </form>
     </section>
   </div>
@@ -2232,7 +2245,7 @@ $("bfLabel").addEventListener("click",()=>{
 });
 
 
-/* ---------- SECOND BOX LABELS ----------
+/* ---------- MULTI BOX LABEL ----------
    Replaces the old Publisher label: a 4 x 6 in portrait label whose top part is printed upside down
    (box count, description, item) so it reads from either end, then BOX n of m, description, item,
    and the item / job / date of manufacture / country of origin lines. One builder makes the HTML for
@@ -2242,13 +2255,14 @@ const lbToday=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getM
 function lbData(){
   const v=id=>$(id).value.trim();
   const iso=v("lbDate")||lbToday(),[y,m,d]=iso.split("-").map(Number);
-  return {item:v("lbItem"),desc:v("lbDesc"),job:v("lbJob"),box:v("lbBox")||"2",of:v("lbOf")||"2",
+  const wt=parseFloat(v("lbWt"));
+  return {item:v("lbItem"),desc:v("lbDesc"),job:v("lbJob"),wt:wt>=0?`${+wt.toFixed(2)} lbs`:"",box:v("lbBox")||"2",of:v("lbOf")||"2",
     date:y?`${m}/${d}/${String(y).slice(-2)}`:iso,origin:v("lbOrigin")||"USA"};
 }
 function lbHtml(r,preview){
   const e=esc,count=`${e(r.box)} of ${e(r.of)}`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${r.item?e(r.item)+" box "+count:"Second box label"}</title>
+<title>${r.item?e(r.item)+" box "+count:"Multi box label"}</title>
 <style>
 @page{size:4in 6in;margin:0}
 *{box-sizing:border-box}
@@ -2259,7 +2273,7 @@ html,body{margin:0;background:${preview?"#fff":"#e4e8ec"};color:#000;font-family
 .wrap{display:flex;justify-content:center;padding:${preview?"0":"0 16px 24px"}}
 #label{width:4in;height:6in;background:#fff;${preview?"":"box-shadow:0 2px 10px rgba(0,0,0,.18);"}overflow:hidden;display:flex;flex-direction:column;padding:.08in .1in .08in}
 .c{text-align:center;white-space:nowrap;overflow:hidden;line-height:1.05}
-.cnt{font-family:Calibri,Carlito,"Segoe UI",Arial,sans-serif;font-weight:700}
+.cnt{font-family:Calibri,Carlito,"Segoe UI",Arial,sans-serif;font-weight:700;-webkit-text-stroke:.025in #000;paint-order:stroke fill}
 .flip{transform:rotate(180deg);height:1.95in;display:flex;flex-direction:column;justify-content:flex-end;border-top:1.5px solid #000;padding-top:.04in}
 .flip .cnt{font-size:.9in;line-height:.95}
 .flip .ds{font-size:.17in;font-weight:700}
@@ -2268,9 +2282,10 @@ html,body{margin:0;background:${preview?"#fff":"#e4e8ec"};color:#000;font-family
 .big{font-size:1.15in;line-height:1}
 .ds{font-size:.2in;font-weight:700;margin-top:.14in}
 .it{font-size:.42in;font-weight:900;letter-spacing:.01em;margin-top:.04in}
-.info{margin-top:auto;font-size:.125in;line-height:1.5}
+.info{margin-top:auto;font-size:.15in;line-height:1.45}
 .info b{font-weight:700}
 .info .gap{margin-top:.06in}
+.info .last{display:flex;justify-content:space-between;gap:.1in}
 @media print{html,body{background:#fff}.bar{display:none}.wrap{padding:0;display:block}#label{box-shadow:none;margin:0}}
 </style></head><body>
 ${preview?"":`<div class="bar"><button class="primary" id="print" type="button">Print</button><button id="close" type="button">Close</button></div>`}
@@ -2288,7 +2303,7 @@ ${preview?"":`<div class="bar"><button class="primary" id="print" type="button">
     <div><b>Item:</b> ${e(r.item)}</div>
     <div><b>Job#</b> ${e(r.job)}</div>
     <div class="gap"><b>Date of Manufacture:</b> ${e(r.date)}</div>
-    <div><b>Country of Origin:</b> ${e(r.origin)}</div>
+    <div class="last"><span><b>Country of Origin:</b> ${e(r.origin)}</span>${r.wt?`<span><b>Weight:</b> ${e(r.wt)}</span>`:""}</div>
   </div>
 </div></div>
 <script>
@@ -2305,18 +2320,65 @@ ${preview?"":`<div class="bar"><button class="primary" id="print" type="button">
 }
 function lbRender(){
   $("lbFrame").srcdoc=lbHtml(lbData(),true);
-  try{localStorage.setItem(LB_KEY,JSON.stringify({item:$("lbItem").value,desc:$("lbDesc").value,job:$("lbJob").value,
+  try{localStorage.setItem(LB_KEY,JSON.stringify({item:$("lbItem").value,desc:$("lbDesc").value,wt:$("lbWt").value,job:$("lbJob").value,
     box:$("lbBox").value,of:$("lbOf").value,origin:$("lbOrigin").value}))}catch(err){}
 }
 (function lbInit(){
   try{const s=JSON.parse(localStorage.getItem(LB_KEY)||"null");
-    if(s)[["lbItem","item"],["lbDesc","desc"],["lbJob","job"],["lbBox","box"],["lbOf","of"],["lbOrigin","origin"]].forEach(([id,k])=>{if(s[k]!=null&&s[k]!=="")$(id).value=s[k]})}catch(err){}
+    if(s)[["lbItem","item"],["lbDesc","desc"],["lbWt","wt"],["lbJob","job"],["lbBox","box"],["lbOf","of"],["lbOrigin","origin"]].forEach(([id,k])=>{if(s[k]!=null&&s[k]!=="")$(id).value=s[k]})}catch(err){}
   $("lbDate").value=lbToday(); // always today's date when the page opens
 })();
 $("lbForm").addEventListener("input",lbRender);
 $("lbForm").addEventListener("submit",e=>e.preventDefault());
-$("lbClear").addEventListener("click",()=>{["lbItem","lbDesc","lbJob"].forEach(id=>$(id).value="");
+$("lbClear").addEventListener("click",()=>{["lbItem","lbDesc","lbWt","lbJob"].forEach(id=>$(id).value="");
   $("lbBox").value="2";$("lbOf").value="2";$("lbOrigin").value="USA";$("lbDate").value=lbToday();lbRender();$("lbItem").focus()});
+/* Saved label items: item number, description and weight, shared by the company (table label_items,
+   same rules as the builder's saved items: anyone can add, Packaging engineers and Admins change or remove). */
+let LBLIB=[],lbDelArm=null,lbLibStarted=false,lbFocus=false;
+const lbLibMsg=t=>{$("lbLibMsg").textContent=t};
+const lbKey=s=>String(s).trim().toLowerCase();
+function lbRenderLib(){
+  const sel=$("lbSel"),keep=sel.value,on=!!(sb&&PROFILE);
+  sel.innerHTML=LBLIB.length?LBLIB.map(it=>`<option value="${esc(it.id)}">${esc(it.item_no)}${it.description?"  ("+esc(it.description)+")":""}</option>`).join("")
+    :`<option value="">${on?"No saved items yet":"Sign in to see saved items"}</option>`;
+  if(LBLIB.some(it=>it.id===keep))sel.value=keep;
+  $("lbNames").innerHTML=LBLIB.map(it=>`<option value="${esc(it.item_no)}">${esc(it.description||"")}</option>`).join("");
+  sel.disabled=$("lbUse").disabled=!LBLIB.length;$("lbSave").disabled=!on;
+  const w=canBoxTools();$("lbManage").hidden=!on||!w;
+  $("lbList").innerHTML=LBLIB.length?LBLIB.map(it=>`<div class="lib-item"><span>${esc(it.item_no)} <span class="mono">${esc(it.description||"")}${it.weight_lb!=null?" · "+it.weight_lb+" lb":""}</span></span>
+    ${w?`<button type="button" class="x" data-lbdel="${esc(it.id)}">${lbDelArm===it.id?"Confirm remove":"Remove"}</button>`:""}</div>`).join("")
+    :`<p class="hint">Nothing saved yet.</p>`;
+}
+async function lbLoadLib(){
+  if(!sb||!PROFILE){LBLIB=[];lbRenderLib();return}
+  const {data,error}=await sb.from("label_items").select("id,item_no,description,weight_lb").order("item_no");
+  if(error){lbLibMsg("Couldn't load your company's saved label items.");lbRenderLib();return}
+  LBLIB=data.map(r=>({...r,weight_lb:r.weight_lb==null?null:+r.weight_lb}));lbRenderLib();
+}
+function lbFill(it){$("lbItem").value=it.item_no;$("lbDesc").value=it.description||"";$("lbWt").value=it.weight_lb!=null?it.weight_lb:"";lbRender()}
+$("lbUse").addEventListener("click",()=>{const it=LBLIB.find(x=>x.id===$("lbSel").value);if(it){lbFill(it);lbLibMsg(`Using ${it.item_no}. Enter the job number.`);$("lbJob").focus()}});
+// typing (or picking from the list) a saved item number fills in its description and weight
+$("lbItem").addEventListener("change",()=>{const it=LBLIB.find(x=>lbKey(x.item_no)===lbKey($("lbItem").value));if(it)lbFill(it)});
+$("lbSave").addEventListener("click",async()=>{
+  if(!sb||!PROFILE)return;
+  const item=$("lbItem").value.trim(),desc=$("lbDesc").value.trim(),w=parseFloat($("lbWt").value);
+  if(!item){lbLibMsg("Enter an item number to save.");$("lbItem").focus();return}
+  const ex=LBLIB.find(x=>lbKey(x.item_no)===lbKey(item));
+  if(ex&&!canBoxTools()){lbLibMsg(`${item} is already saved. Only a Packaging engineer or Admin can change it.`);return}
+  const row={item_no:item,description:desc,weight_lb:w>=0?w:null,updated_by:PROFILE.id,updated_at:new Date().toISOString()};
+  $("lbSave").disabled=true;
+  try{const q=ex?sb.from("label_items").update(row).eq("id",ex.id):sb.from("label_items").insert({...row,company_id:PROFILE.company_id});
+    const {error}=await q;if(error)throw error;await lbLoadLib();lbLibMsg((ex?"Updated ":"Saved ")+item+".")}
+  catch(err){lbLibMsg("Couldn't save "+item+": "+(err.message||"try again in a moment."))}
+  finally{$("lbSave").disabled=!(sb&&PROFILE)}
+});
+$("lbList").addEventListener("click",async e=>{
+  const id=e.target.dataset.lbdel;if(!id||!sb||!canBoxTools())return;
+  if(lbDelArm!==id){lbDelArm=id;lbRenderLib();return}
+  lbDelArm=null;
+  try{const {error}=await sb.from("label_items").delete().eq("id",id);if(error)throw error;await lbLoadLib();lbLibMsg("Removed.")}
+  catch(err){lbLibMsg("Couldn't remove that item.")}
+});
 $("lbPrint").addEventListener("click",()=>{
   const m=$("lbMsg"),say=t=>{m.textContent=t;m.hidden=!t};
   const r=lbData();
@@ -2331,6 +2393,7 @@ const PAGES={builder:"builderPage",compare:"comparePage",ship:"shipPage",boxes:"
 const PAGE_OK={builder:()=>true,compare:canBoxTools,ship:canBoxTools,boxes:canBoxTools,labels:canBoxTools};
 function applyRole(){
   renderLib();
+  LBLIB=[];lbLibStarted=false;lbRenderLib(); // reloads for this account when the label page opens
   document.querySelectorAll(".pagenav button").forEach(b=>b.hidden=!PAGE_OK[b.dataset.page]());
   // show the page tabs whenever this role can open more than the builder
   document.querySelector(".pagenav").hidden=Object.keys(PAGE_OK).filter(k=>PAGE_OK[k]()).length<2;
@@ -2347,7 +2410,8 @@ function showPage(pg){
     return}
   for(const k in PAGES)$(PAGES[k]).hidden=pg!==k;
   if(pg==="boxes"&&!bfStarted){bfStarted=true;bfInit()}
-  if(pg==="labels")lbRender();
+  if(pg==="labels"){lbRender();if(!lbLibStarted&&PROFILE){lbLibStarted=true;lbLoadLib()}}
+  if(pg==="labels"&&!lbFocus){lbFocus=true;window.addEventListener("focus",()=>{if(PROFILE&&!$("labelsPage").hidden)lbLoadLib()})}
   document.querySelectorAll(".pagenav button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.page===pg));
   const want=pg==="builder"?"":"#"+pg;
   if(location.hash!==want)history.replaceState(null,"",location.pathname+location.search+want);
