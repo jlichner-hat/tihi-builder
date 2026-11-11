@@ -102,6 +102,8 @@ td.n{font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-num
 button.save{padding:3px 10px;font-size:.78rem;margin-left:auto;flex:none}
 button:disabled{opacity:.5;cursor:default}
 .hdr-actions{display:flex;gap:8px;flex-wrap:wrap}
+.lb-prev{display:flex;justify-content:center;padding:12px;background:var(--soft);border-radius:4px}
+.lb-prev iframe{width:4in;height:6in;max-width:100%;border:0;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.18)}
 #pdfMsg,#cmpPdfMsg{width:100%;text-align:right}
 .iso{margin:0;padding:8px;background:var(--bg);border-radius:4px;display:flex;justify-content:center}
 .iso svg{max-height:240px;width:100%}
@@ -211,6 +213,7 @@ th.opt{text-align:right}
   <button type="button" data-page="compare" aria-pressed="false" hidden>Compare box sizes</button>
   <button type="button" data-page="ship" aria-pressed="false" hidden>Shipping Comparison</button>
   <button type="button" data-page="boxes" aria-pressed="false" hidden>Box finder</button>
+  <button type="button" data-page="labels" aria-pressed="false" hidden>Second box labels</button>
 </nav>
 <div id="builderPage" class="col" style="gap:20px">
 <header>
@@ -432,6 +435,44 @@ th.opt{text-align:right}
     </section>
   </div>
   <div class="col" id="bfResults" aria-live="polite"></div>
+</div>
+</div>
+
+<!-- SECOND BOX LABELS -->
+<div id="labelsPage" class="col" style="gap:20px" hidden>
+<header>
+  <div>
+    <h1>Second box labels</h1>
+    <p class="sub">Make the 4 × 6 label for an item that ships in more than one box. Fill in the item and job, check the preview, then print.</p>
+  </div>
+  <div class="hdr-actions"><button id="lbPrint" class="primary" type="button">Print label</button></div>
+  <p id="lbMsg" class="hint" role="status" hidden></p>
+</header>
+<div class="grid">
+  <div class="col">
+    <section class="panel" aria-labelledby="lbInH">
+      <div class="panel-head"><div><div class="step">Step 1</div><h2 id="lbInH">Label details</h2></div>
+        <button id="lbClear" type="button" class="linkbtn">Clear</button></div>
+      <form id="lbForm" class="col" style="gap:12px" novalidate>
+        <label for="lbItem">Item number<input id="lbItem" type="text" autocomplete="off" spellcheck="false" placeholder="E5G-P33SS-BLK"></label>
+        <label for="lbDesc">Description<input id="lbDesc" type="text" autocomplete="off" placeholder="E5 3 Over 3 Static Pole - Black"></label>
+        <label for="lbJob">Job number<input id="lbJob" type="text" autocomplete="off" spellcheck="false" placeholder="A000671691"></label>
+        <div class="row r2">
+          <label for="lbBox">Box<input id="lbBox" type="number" min="1" step="1" value="2"></label>
+          <label for="lbOf">Of<input id="lbOf" type="number" min="1" step="1" value="2"></label>
+        </div>
+        <label for="lbDate">Date of manufacture<input id="lbDate" type="date"></label>
+        <label for="lbOrigin">Country of origin<input id="lbOrigin" type="text" value="USA" autocomplete="off"></label>
+        <p class="hint">Date of manufacture starts at today. The top half of the label prints upside down, the same as the old Publisher label, so it reads right from either end of the box. In the print window, pick the 4 × 6 label printer and set margins to None if it asks.</p>
+      </form>
+    </section>
+  </div>
+  <div class="col">
+    <section class="panel" aria-labelledby="lbPrevH">
+      <div class="panel-head"><div><div class="step">Step 2</div><h2 id="lbPrevH">Preview</h2></div><span class="hint">4 × 6 in</span></div>
+      <div class="lb-prev"><iframe id="lbFrame" title="Label preview" tabindex="-1"></iframe></div>
+    </section>
+  </div>
 </div>
 </div>
 </div>
@@ -2191,13 +2232,108 @@ $("bfLabel").addEventListener("click",()=>{
 });
 
 
+/* ---------- SECOND BOX LABELS ----------
+   Replaces the old Publisher label: a 4 x 6 in portrait label whose top part is printed upside down
+   (box count, description, item) so it reads from either end, then BOX n of m, description, item,
+   and the item / job / date of manufacture / country of origin lines. One builder makes the HTML for
+   both the on-page preview and the print window, so what you see is what prints. */
+const LB_KEY="tihi.label.v1";
+const lbToday=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`};
+function lbData(){
+  const v=id=>$(id).value.trim();
+  const iso=v("lbDate")||lbToday(),[y,m,d]=iso.split("-").map(Number);
+  return {item:v("lbItem"),desc:v("lbDesc"),job:v("lbJob"),box:v("lbBox")||"2",of:v("lbOf")||"2",
+    date:y?`${m}/${d}/${String(y).slice(-2)}`:iso,origin:v("lbOrigin")||"USA"};
+}
+function lbHtml(r,preview){
+  const e=esc,count=`${e(r.box)} of ${e(r.of)}`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${r.item?e(r.item)+" box "+count:"Second box label"}</title>
+<style>
+@page{size:4in 6in;margin:0}
+*{box-sizing:border-box}
+html,body{margin:0;background:${preview?"#fff":"#e4e8ec"};color:#000;font-family:Arial,Helvetica,sans-serif}
+.bar{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:12px 16px;position:sticky;top:0;background:#e4e8ec}
+.bar button{font:600 14px Arial,sans-serif;padding:8px 14px;border-radius:6px;border:1px solid #c3cad2;background:#fff;color:#000;cursor:pointer}
+.bar button.primary{background:#f2b705;border-color:#d9a404}
+.wrap{display:flex;justify-content:center;padding:${preview?"0":"0 16px 24px"}}
+#label{width:4in;height:6in;background:#fff;${preview?"":"box-shadow:0 2px 10px rgba(0,0,0,.18);"}overflow:hidden;display:flex;flex-direction:column;padding:.08in .1in .08in}
+.c{text-align:center;white-space:nowrap;overflow:hidden;line-height:1.05}
+.cnt{font-family:Calibri,Carlito,"Segoe UI",Arial,sans-serif;font-weight:700}
+.flip{transform:rotate(180deg);height:1.95in;display:flex;flex-direction:column;justify-content:flex-end;border-top:1.5px solid #000;padding-top:.04in}
+.flip .cnt{font-size:.9in;line-height:.95}
+.flip .ds{font-size:.17in;font-weight:700}
+.flip .it{font-size:.36in;font-weight:900}
+.box{font-family:Calibri,Carlito,"Segoe UI",Arial,sans-serif;font-size:.42in;margin-top:.16in}
+.big{font-size:1.15in;line-height:1}
+.ds{font-size:.2in;font-weight:700;margin-top:.14in}
+.it{font-size:.42in;font-weight:900;letter-spacing:.01em;margin-top:.04in}
+.info{margin-top:auto;font-size:.125in;line-height:1.5}
+.info b{font-weight:700}
+.info .gap{margin-top:.06in}
+@media print{html,body{background:#fff}.bar{display:none}.wrap{padding:0;display:block}#label{box-shadow:none;margin:0}}
+</style></head><body>
+${preview?"":`<div class="bar"><button class="primary" id="print" type="button">Print</button><button id="close" type="button">Close</button></div>`}
+<div class="wrap"><div id="label">
+  <div class="flip">
+    <div class="c it fit">${e(r.item)}</div>
+    <div class="c ds fit">${e(r.desc)}</div>
+    <div class="c cnt fit">${count}</div>
+  </div>
+  <div class="c box">BOX</div>
+  <div class="c cnt big fit">${count}</div>
+  <div class="c ds fit">${e(r.desc)}</div>
+  <div class="c it fit">${e(r.item)}</div>
+  <div class="info">
+    <div><b>Item:</b> ${e(r.item)}</div>
+    <div><b>Job#</b> ${e(r.job)}</div>
+    <div class="gap"><b>Date of Manufacture:</b> ${e(r.date)}</div>
+    <div><b>Country of Origin:</b> ${e(r.origin)}</div>
+  </div>
+</div></div>
+<script>
+(function(){
+  // shrink any line that is too wide for the label (a long item number or description)
+  function fit(){var els=document.querySelectorAll(".fit");for(var i=0;i<els.length;i++){var el=els[i];el.style.fontSize="";
+    var fs=parseFloat(getComputedStyle(el).fontSize);while(fs>6&&el.scrollWidth>el.clientWidth+1){fs-=1;el.style.fontSize=fs+"px"}}}
+  fit();window.addEventListener("load",fit);if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fit);
+  var p=document.getElementById("print"),c=document.getElementById("close");
+  if(p)p.onclick=function(){window.print()};if(c)c.onclick=function(){window.close()};
+})();
+<\/script>
+</body></html>`;
+}
+function lbRender(){
+  $("lbFrame").srcdoc=lbHtml(lbData(),true);
+  try{localStorage.setItem(LB_KEY,JSON.stringify({item:$("lbItem").value,desc:$("lbDesc").value,job:$("lbJob").value,
+    box:$("lbBox").value,of:$("lbOf").value,origin:$("lbOrigin").value}))}catch(err){}
+}
+(function lbInit(){
+  try{const s=JSON.parse(localStorage.getItem(LB_KEY)||"null");
+    if(s)[["lbItem","item"],["lbDesc","desc"],["lbJob","job"],["lbBox","box"],["lbOf","of"],["lbOrigin","origin"]].forEach(([id,k])=>{if(s[k]!=null&&s[k]!=="")$(id).value=s[k]})}catch(err){}
+  $("lbDate").value=lbToday(); // always today's date when the page opens
+})();
+$("lbForm").addEventListener("input",lbRender);
+$("lbForm").addEventListener("submit",e=>e.preventDefault());
+$("lbClear").addEventListener("click",()=>{["lbItem","lbDesc","lbJob"].forEach(id=>$(id).value="");
+  $("lbBox").value="2";$("lbOf").value="2";$("lbOrigin").value="USA";$("lbDate").value=lbToday();lbRender();$("lbItem").focus()});
+$("lbPrint").addEventListener("click",()=>{
+  const m=$("lbMsg"),say=t=>{m.textContent=t;m.hidden=!t};
+  const r=lbData();
+  if(!r.item||!r.job){say("Enter the item number and job number first.");($(r.item?"lbJob":"lbItem")).focus();return}
+  const url=URL.createObjectURL(new Blob([lbHtml(r,false)],{type:"text/html"}));
+  const w=window.open(url,"_blank","width=480,height=760");
+  say(w?"":"The browser blocked the print window. Allow pop-ups for this site and try again.");
+});
+
 /* ---------- PAGES ---------- */
-const PAGE_OK={builder:()=>true,compare:canBoxTools,ship:canBoxTools,boxes:canBoxTools};
+const PAGES={builder:"builderPage",compare:"comparePage",ship:"shipPage",boxes:"boxesPage",labels:"labelsPage"};
+const PAGE_OK={builder:()=>true,compare:canBoxTools,ship:canBoxTools,boxes:canBoxTools,labels:canBoxTools};
 function applyRole(){
-  const ok=canBoxTools();
   renderLib();
   document.querySelectorAll(".pagenav button").forEach(b=>b.hidden=!PAGE_OK[b.dataset.page]());
-  document.querySelector(".pagenav").hidden=!ok;
+  // show the page tabs whenever this role can open more than the builder
+  document.querySelector(".pagenav").hidden=Object.keys(PAGE_OK).filter(k=>PAGE_OK[k]()).length<2;
   showPage(location.hash.slice(1));
 }
 function showPage(pg){
@@ -2205,12 +2341,13 @@ function showPage(pg){
   if(!PAGE_OK[pg]()){
     // Not allowed for this role (or still signing in): show the builder but keep the link,
     // so #boxes still opens once an engineer's account has loaded.
-    $("builderPage").hidden=false;$("comparePage").hidden=true;$("shipPage").hidden=true;$("boxesPage").hidden=true;
+    for(const k in PAGES)$(PAGES[k]).hidden=k!=="builder";
     document.querySelectorAll(".pagenav button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.page==="builder"));
     if(PROFILE&&location.hash)history.replaceState(null,"",location.pathname+location.search);
     return}
-  $("builderPage").hidden=pg!=="builder";$("comparePage").hidden=pg!=="compare";$("shipPage").hidden=pg!=="ship";$("boxesPage").hidden=pg!=="boxes";
+  for(const k in PAGES)$(PAGES[k]).hidden=pg!==k;
   if(pg==="boxes"&&!bfStarted){bfStarted=true;bfInit()}
+  if(pg==="labels")lbRender();
   document.querySelectorAll(".pagenav button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.page===pg));
   const want=pg==="builder"?"":"#"+pg;
   if(location.hash!==want)history.replaceState(null,"",location.pathname+location.search+want);
