@@ -617,14 +617,14 @@ function plan(){
     else for(let i=0;i<N;i++){
       const layers=[];
       for(const e of evenSkus){const c=Math.floor(e.qty/N)+(i<e.qty%N?1:0);if(c>0)layers.push(...splitLayers(e.s,c,e.mr))}
-      layers.sort((a,b)=>(b.full-a.full)||(b.cases*b.sku.wt-a.cases*a.sku.wt));
+      layers.sort(heavyFirst);
       const kinds=new Set(layers.map(l=>l.sku.idx));
       out.built.push({type:kinds.size>1?"mixed":"partial",pallet:mixP,layers,even:true});
     }
   }
-  // Mixed pallets: heaviest full layers at the bottom, partial layers on top, first-fit by height and weight
+  // Mixed pallets: full layers of the heaviest items at the bottom, partial layers on top, first-fit by height and weight
   const availMix=usableHeight(mixP);
-  remLayers.sort((a,b)=>(b.full-a.full)||(b.cases*b.sku.wt-a.cases*a.sku.wt));
+  remLayers.sort(heavyFirst);
   const mixed=[];
   for(const ly of remLayers){
     const lw=ly.cases*ly.sku.wt;
@@ -643,7 +643,7 @@ function plan(){
         const t=c[0];t.layers.push(ly);t.h+=ly.h;t.wt+=ly.cases*ly.sku.wt;t.cnt[k]=(t.cnt[k]||0)+1;}
       return bal;};
     let bal=null;for(let n=mixed.length;n<=mixed.length+2&&!bal;n++)bal=deal(n);
-    if(bal){bal.forEach(m=>{delete m.cnt;m.layers.sort((a,b)=>(b.full-a.full)||(b.cases*b.sku.wt-a.cases*a.sku.wt))});const key=m=>m.layers.map(l=>l.sku.idx+":"+l.cases).join(",");
+    if(bal){bal.forEach(m=>{delete m.cnt;m.layers.sort(heavyFirst)});const key=m=>m.layers.map(l=>l.sku.idx+":"+l.cases).join(",");
       mixed.splice(0,mixed.length,...bal.filter(m=>m.layers.length).sort((a,b)=>key(a)<key(b)?-1:key(a)>key(b)?1:0))}
   }
   mixed.forEach(m=>{const kinds=new Set(m.layers.map(l=>l.sku.idx));if(kinds.size===1)m.type="partial";out.built.push(m)});
@@ -651,6 +651,11 @@ function plan(){
     b.weight=b.pallet.tare+b.layers.reduce((a,l)=>a+l.cases*l.sku.wt,0);b.cases=b.layers.reduce((a,l)=>a+l.cases,0);
     b.footL=b.pallet.L+2*state.overhang;b.footW=b.pallet.W+2*state.overhang;});
   return out;
+}
+/* Bottom-to-top layer order on a mixed pallet. Full layers go below partial ones (a full layer can't sit on a gap);
+   within each group the heaviest item goes lowest, then the heavier layer, then the larger item count. */
+function heavyFirst(a,b){
+  return (b.full-a.full)||((b.sku.wt||0)-(a.sku.wt||0))||(b.cases*(b.sku.wt||0)-a.cases*(a.sku.wt||0))||(b.cases-a.cases);
 }
 function splitLayers(s,n,r){const a=[];let left=n;
   while(left>0){const c=Math.min(r.ti,left);a.push({sku:s,cases:c,h:r.h,res:r,full:c===r.ti?1:0});left-=c}return a}
@@ -942,7 +947,7 @@ function renderResults(){
     h+=`<tr><td class="mono">${ids}</td><td class="n">${n}</td><td>${pill}</td><td>${esc(b.pallet.name)}</td><td>${contents}</td><td class="n">${b.layers.length}</td><td class="n">${b.cases}</td><td class="n">${fmt(b.height,1)}</td><td class="n">${fmt(b.weight)}</td><td class="mono">${tr||"–"}</td></tr>`;
   }
   h+=`</tbody></table></div>`;
-  h+=`<p class="hint">Mixed pallets put the heaviest full layers on the bottom and partial layers on top. Partial layers are shown at their share of the pallet length.</p></section>`;
+  h+=`<p class="hint">Mixed pallets put the heaviest items on the bottom: full layers go heaviest item first, then partial layers on top, also heaviest first. Partial layers are shown at their share of the pallet length.</p></section>`;
   $("results").innerHTML=h;
 }
 
