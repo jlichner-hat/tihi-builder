@@ -327,6 +327,10 @@ th.opt{text-align:right}
       <div class="panel-head"><div><div class="step">Step 1</div><h2 id="cmpBoxH">Box sizes</h2></div>
         <button id="cmpAdd" type="button">+ Add box size</button></div>
       <label for="cmpItem">Item being packed<input id="cmpItem" autocomplete="off" placeholder="e.g. 12 oz jar"></label>
+      <div class="lib"><div class="lib-row">
+        <label for="cmpSel">Saved items<select id="cmpSel" disabled><option>Loading saved items...</option></select></label>
+        <button id="cmpUse" type="button" disabled>Add as box size</button></div>
+        <p id="cmpLibMsg" class="hint" role="status">Items saved on any page show up here. Typing a saved name in a box fills in its size and weight.</p></div>
       <p class="hint">Dimensions in inches and weight in pounds for one full box. Units per box is how many of the item each box holds, so boxes of different sizes are compared on product per pallet. Leave it at 1 to compare boxes.</p>
       <div id="cmpList" class="col"></div>
     </section>
@@ -413,6 +417,10 @@ th.opt{text-align:right}
           <p class="hint">Finds boxes with at least this much space inside, closest first. It compares volume only, so check that the product's shape fits the box.</p>
         </div>
         <div id="bfBySize" class="col" style="gap:12px">
+        <div class="lib"><div class="lib-row">
+          <label for="bfSel">Saved items<select id="bfSel" disabled><option>Loading saved items...</option></select></label>
+          <button id="bfUse" type="button" disabled>Use size</button></div>
+          <p class="hint">Items saved on any page show up here.</p></div>
         <div class="row r3">
           <label for="bfL">Length in<input id="bfL" type="text" inputmode="decimal" autocomplete="off" placeholder="12"></label>
           <label for="bfW">Width in<input id="bfW" type="text" inputmode="decimal" autocomplete="off" placeholder="9 1/2"></label>
@@ -510,11 +518,11 @@ th.opt{text-align:right}
         <button id="rwAdd" type="button">+ Add item</button></div>
       <div class="lib">
         <div class="lib-row">
-          <label for="rwSel">Saved Redwood items<select id="rwSel" disabled><option>Loading saved items...</option></select></label>
+          <label for="rwSel">Saved items<select id="rwSel" disabled><option>Loading saved items...</option></select></label>
           <button id="rwUse" type="button" disabled>Add to list</button>
         </div>
         <details id="rwManage" hidden><summary>Manage saved items</summary><div id="rwLibList" class="col"></div></details>
-        <p id="rwLibMsg" class="hint" role="status">Click Save on an item to keep its packaged size and weight. Typing a saved item number fills in the rest.</p>
+        <p id="rwLibMsg" class="hint" role="status">Save keeps an item's packaged size and weight in the company's saved items, shared with every page. Typing a saved item number fills in the rest.</p>
       </div>
       <datalist id="rwNames"></datalist>
       <p class="hint">Packaged size in inches (fractions like 9 1/2 work) and weight in pounds for one item. Qty is how many go in the overpack.</p>
@@ -1200,6 +1208,13 @@ function renderLib(){
     ${LIBW?`<button type="button" class="x" data-libdel="${esc(it.id)}">${delArm===it.id?"Confirm remove":"Remove"}</button>`:""}</div>`).join("")
     :`<p class="hint">Nothing saved yet.</p>`;
   document.querySelectorAll("#pkgList button.save").forEach(b=>b.disabled=!LIBDB);
+  libPickers();
+}
+// The same saved items appear on Compare box sizes (and so Shipping Comparison), Box finder and Redwood.
+function libPickers(){
+  const opts=LIB.length?LIB.map(it=>`<option value="${esc(it.id)}">${esc(it.name)}  (${it.L}×${it.W}×${it.H} in, ${it.wt} lb)</option>`).join(""):`<option value="">No saved items yet</option>`;
+  for(const [sel,btn] of [["cmpSel","cmpUse"],["bfSel","bfUse"]]){const k=$(sel).value;$(sel).innerHTML=opts;if(LIB.some(it=>it.id===k))$(sel).value=k;$(sel).disabled=$(btn).disabled=!LIB.length}
+  rwRenderLib();
 }
 const CFG=window.TIHI_CONFIG||{};
 const sb=(window.supabase&&CFG.url&&CFG.anonKey)?window.supabase.createClient(CFG.url,CFG.anonKey):null;
@@ -1721,6 +1736,10 @@ $("cmpAdd").addEventListener("click",()=>{if(cmp.boxes.length>=CMP_MAX)return;
   cmp.boxes.push({name:"Box "+LETTERS[cmp.boxes.length],L:last.L,W:last.W,H:last.H,wt:last.wt,units:last.units});
   cmpRenderInputs();cmpRerender();const el=$("cb-name-"+(cmp.boxes.length-1));if(el){el.focus();el.select()}});
 $("cmpItem").addEventListener("input",e=>{cmp.item=e.target.value;cmpRerender()});
+$("cmpUse").addEventListener("click",()=>{const it=LIB.find(x=>x.id===$("cmpSel").value),m=$("cmpLibMsg");if(!it)return;
+  if(cmp.boxes.length>=CMP_MAX){m.textContent=`Compare holds up to ${CMP_MAX} box sizes. Remove one first.`;return}
+  cmp.boxes.push({name:it.name,L:+it.L,W:+it.W,H:+it.H,wt:+it.wt,units:1});cmpRenderInputs();cmpRerender();
+  m.textContent=`Added ${it.name}. Set units per box if it holds more than one item.`});
 $("cmpPreset").addEventListener("change",e=>{cmp.preset=e.target.value;const p=PAL_PRESETS[cmp.preset];
   if(p){cmp.pal={L:p.L,W:p.W,H:p.H,tare:p.tare,max:p.max};cmpRenderInputs()}cmpRerender()});
 ["cmpPL","cmpPW","cmpPH","cmpPT","cmpPM"].forEach(id=>$(id).addEventListener("input",e=>{cmp.pal[e.target.dataset.k]=num(e.target.value);
@@ -2189,6 +2208,8 @@ function bfRun(){
 const bfN=v=>Number(v).toLocaleString(undefined,{maximumFractionDigits:3});
 const bfDims=b=>[b.L,b.W,b.H].map(bfN).join(" × ");
 $("bfForm").addEventListener("submit",e=>{e.preventDefault();bfRun()});
+$("bfUse").addEventListener("click",()=>{const it=LIB.find(x=>x.id===$("bfSel").value);if(!it)return;
+  $("bfL").value=it.L;$("bfW").value=it.W;$("bfH").value=it.H;bfRun()});
 ["bfL","bfW","bfH","bfPad"].forEach(id=>$(id).addEventListener("input",bfRun));
 ["bfUp","bfCount"].forEach(id=>$(id).addEventListener("change",bfRun));
 $("bfReload").addEventListener("click",bfInit);
@@ -2708,9 +2729,10 @@ function rwRender(){
 }
 function rwInv(){if(rwStarted)rwSchedule()}
 
-/* saved Redwood items (table redwood_items, Admins only) */
+/* saved items: Redwood uses the company's shared saved items (table items), item number = name */
 const rwLibMsg=t=>{$("rwLibMsg").textContent=t};
 function rwRenderLib(){
+  RWLIB=LIB.map(it=>({id:it.id,item_no:it.name,description:"",L:+it.L,W:+it.W,H:+it.H,wt:+it.wt}));
   const sel=$("rwSel"),keep=sel.value,on=!!(sb&&PROFILE);
   sel.innerHTML=RWLIB.length?RWLIB.map(it=>`<option value="${esc(it.id)}">${esc(it.item_no)}  (${rwN(it.L)}×${rwN(it.W)}×${rwN(it.H)} in, ${rwN(it.wt)} lb)</option>`).join("")
     :`<option value="">${on?"No saved items yet":"Sign in to see saved items"}</option>`;
@@ -2722,12 +2744,7 @@ function rwRenderLib(){
     <button type="button" class="x" data-rwlibdel="${esc(it.id)}">${rwDelArm===it.id?"Confirm remove":"Remove"}</button></div>`).join("");
   document.querySelectorAll("#rwList button.save").forEach(b=>b.disabled=!on);
 }
-async function rwLoadLib(){
-  if(!sb||!PROFILE){RWLIB=[];rwRenderLib();return}
-  const {data,error}=await sb.from("redwood_items").select("id,item_no,description,length_in,width_in,height_in,weight_lb").order("item_no");
-  if(error){RWLIB=[];rwRenderLib();rwLibMsg(/redwood_items/.test(error.message||"")?"Saved Redwood items aren't set up in the database yet. Run supabase/redwood-items.sql once in the Supabase SQL Editor.":"Couldn't load the saved Redwood items.");return}
-  RWLIB=data.map(r=>({id:r.id,item_no:r.item_no,description:r.description,L:+r.length_in,W:+r.width_in,H:+r.height_in,wt:+r.weight_lb}));rwRenderLib();
-}
+async function rwLoadLib(){if(sb&&PROFILE)await loadLib();rwRenderLib()}
 const rwFromLib=(it,qty)=>({item:it.item_no,desc:it.description||"",L:String(it.L),W:String(it.W),H:String(it.H),wt:String(it.wt),qty:String(qty||1)});
 const rwBlank=r=>!String(r.item).trim()&&![r.desc,r.L,r.W,r.H,r.wt].some(v=>String(v).trim());
 function rwAddRows(list){
@@ -2745,7 +2762,7 @@ $("rwList").addEventListener("input",e=>{const f=e.target.dataset.f,row=e.target
 // typing (or picking) a saved item number fills in its description, size and weight
 $("rwList").addEventListener("change",e=>{if(e.target.dataset.f!=="item")return;const i=+e.target.closest("[data-i]").dataset.i;
   const it=RWLIB.find(x=>rwKey(x.item_no)===rwKey(e.target.value));if(!it)return;
-  rw.rows[i]=rwFromLib(it,rw.rows[i].qty||1);rwRenderRows();rwSchedule()});
+  rw.rows[i]={...rwFromLib(it,rw.rows[i].qty||1),desc:rw.rows[i].desc||""};rwRenderRows();rwSchedule()});
 $("rwList").addEventListener("click",async e=>{
   const d=e.target.dataset;
   if(d.rwdel!==undefined){rw.rows.splice(+d.rwdel,1);if(!rw.rows.length)rw.rows=[{item:"",desc:"",L:"",W:"",H:"",wt:"",qty:"1"}];rwRenderRows();rwSchedule();return}
@@ -2753,19 +2770,16 @@ $("rwList").addEventListener("click",async e=>{
   const r=rw.rows[+d.rwsave],item=String(r.item).trim(),dm=[r.L,r.W,r.H].map(parseDim);
   if(!item){rwLibMsg("Enter an item number to save.");return}
   if(dm.some(v=>!(v>0))){rwLibMsg(`Enter L, W and H before saving ${item}.`);return}
-  const ex=RWLIB.find(x=>rwKey(x.item_no)===rwKey(item));
-  const row={item_no:item,description:String(r.desc).trim(),length_in:dm[0],width_in:dm[1],height_in:dm[2],weight_lb:Math.max(0,num(r.wt,0)),updated_by:PROFILE.id,updated_at:new Date().toISOString()};
   e.target.disabled=true;
-  try{const q=ex?sb.from("redwood_items").update(row).eq("id",ex.id):sb.from("redwood_items").insert({...row,company_id:PROFILE.company_id});
-    const {error}=await q;if(error)throw error;await rwLoadLib();rwLibMsg((ex?"Updated ":"Saved ")+item+".")}
-  catch(err){rwLibMsg(/redwood_items/.test(err.message||"")?"Saved Redwood items aren't set up in the database yet. Run supabase/redwood-items.sql once in the Supabase SQL Editor.":"Couldn't save "+item+": "+(err.message||"try again in a moment."))}
+  try{const existed=await libApi.save(item,{L:dm[0],W:dm[1],H:dm[2],wt:Math.max(0,num(r.wt,0))});rwLibMsg((existed?"Updated ":"Saved ")+item+". It's now in saved items on every page.")}
+  catch(err){rwLibMsg(err.locked?err.message:"Couldn't save "+item+": "+(err.message||"try again in a moment."))}
   finally{e.target.disabled=!(sb&&PROFILE)}
 });
 $("rwLibList").addEventListener("click",async e=>{
   const id=e.target.dataset.rwlibdel;if(!id||!sb)return;
   if(rwDelArm!==id){rwDelArm=id;rwRenderLib();return}
   rwDelArm=null;
-  try{const {error}=await sb.from("redwood_items").delete().eq("id",id);if(error)throw error;await rwLoadLib();rwLibMsg("Removed.")}
+  try{await libApi.remove(id);rwLibMsg("Removed.")}
   catch(err){rwLibMsg("Couldn't remove that item.")}
 });
 $("rwAdd").addEventListener("click",()=>{rw.rows.push({item:"",desc:"",L:"",W:"",H:"",wt:"",qty:"1"});rwRenderRows();
