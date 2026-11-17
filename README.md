@@ -34,6 +34,8 @@ Pallet and truck load planner with company accounts. It's a static site (`index.
 - The **Box finder** page (`index.html#boxes`) takes a product's L × W × H and lists the 3 to 5 smallest boxes from the company box inventory that it fits inside, in any orientation (or with the height kept up). Optional extra room per side allows for padding. It also lists the closest **Uline** boxes, with part numbers linked to Uline, from `uline-boxes.csv` (212 of Uline's standard 200 lb test sizes, inside dimensions). Add rows to that file (Item, Description, Length, Width, Height, Link) to cover more Uline sizes. A **By cubic volume** search lists the smallest boxes with at least a given inside volume (cu ft or cu in).
 - The **Redwood** page (`index.html#redwood`, Admins only) is a packaging configurator for Redwood items. Enter a bill of materials (item number, description, packaged L × W × H, weight, qty), type rows in or paste them from Excel. It packs every piece into one overpack, shows the smallest box it found with a 3D picture of how the items sit and a packing order, then test-packs the company box inventory and the Uline list and shows the smallest boxes that hold everything (Show packing draws any of them). Options: extra room per side for padding, and keep items upright. It warns when the contents pass 65 lb, the rating of Uline's 200 lb test boxes. **Step 3** shows the Ti:Hi of the smallest overpack on the Shipment builder's default pallet (GMA 48 × 40, 52 in stack including the pallet, upright). Its **Box wall** setting (B-Flute 0.125 in, C-Flute 0.1875 in, BC-Flute 0.3125 in) adds the wall to each side of the inside size to get the outside size used for the Ti:Hi.  **Download PDF report** and **Print report** make a branded report with the logo: bill of materials, the overpack shown on the page with its packing order, the other box shapes, and the company and Uline boxes that fit. **Save** puts the item number, size and weight in the company's saved items (table `items`), the same list the other pages use. Typing a saved item number fills in the rest.
 - **Saved items are shared by every page:** the Shipment builder, Compare box sizes (Add as box size, which also feeds Shipping Comparison), Box finder (Use size) and Redwood all read and save the same company list.
+- **Redwood extras:** an **Estimated yearly quantity** field (Step 2) shows pallets a year and how much extra space the best stock box ships in a year compared with a new box of the smallest overpack size, on the page and in the PDF. **Saved results** keeps the bill of materials, overpack size, yearly quantity, Ti:Hi and best boxes in the `redwood_results` table (Admins only; run `supabase/redwood-results.sql` once). Load brings a saved result back onto the page.
+- **Add to company boxes:** Box finder (Box list > Add a box to the company inventory) and Redwood (under the overpack picture) add a box as a new row in the box inventory Google Sheet. See *Adding boxes to the sheet* below.
 - `config.js`: Supabase URL and anon key
 
 ## Box inventory (Google Sheet)
@@ -48,5 +50,16 @@ The sheet needs a header row with **Length**, **Width** and **Height** columns (
 Under "Use a different list" on the page, someone can still paste a different link or open a CSV file of their own.
 - `supabase/schema.sql`: tables, sign-up trigger, roles and access rules
 - `supabase/functions/box-inventory/index.ts`: serves the box inventory to engineers and admins only
+- `supabase/redwood-results.sql`: adds the Redwood saved results table, for a database set up before it
+- `google/add-box.gs`: Apps Script that adds a box row to the inventory sheet
 - `supabase/saved-items-roles.sql`: limits changing and deleting saved items to Packaging engineers and Admins, for a database set up before that rule
 - `supabase/roles.sql`: adds the Packaging engineer role and role changes to a database set up before roles existed
+
+## Adding boxes to the sheet
+The Add to company boxes buttons send the box to the `box-inventory` Supabase function (POST), which checks the person is a Packaging engineer, Admin or site admin and passes it to a small Apps Script in the sheet. The script finds the Length, Width and Height columns (and the name and notes columns, if there are any), skips a name that's already there, and appends a row with the inside size.
+1. Open the box inventory Google Sheet, then Extensions > Apps Script. Paste `google/add-box.gs` and save. If the box list isn't the first tab, set `TAB` at the top.
+2. Project Settings > Script Properties: add `ADD_TOKEN` with a long random password.
+3. Deploy > New deployment > Web app. Execute as **Me**, access **Anyone**. Approve the prompt and copy the Web app URL.
+4. Supabase > Edge Functions > Secrets: add `BOX_INVENTORY_ADD_URL` (the Web app URL) and `BOX_INVENTORY_ADD_TOKEN` (the same password).
+5. Redeploy the `box-inventory` function with the updated `supabase/functions/box-inventory/index.ts`.
+New rows show up on the site right away for the person who added them, and for everyone once Google refreshes the published CSV (a few minutes).
