@@ -107,6 +107,11 @@ button:disabled{opacity:.5;cursor:default}
 #pdfMsg,#cmpPdfMsg{width:100%;text-align:right}
 .iso{margin:0;padding:8px;background:var(--bg);border-radius:4px;display:flex;justify-content:center}
 .iso svg{max-height:240px;width:100%}
+.rw-iso{margin:0;padding:8px;background:var(--bg);border-radius:4px;display:flex;justify-content:center}
+.rw-iso svg{max-height:380px;width:100%}
+textarea{font:inherit;font-family:var(--f-mono);font-size:.85rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:6px 7px;width:100%;resize:vertical}
+.rw-row .r5{grid-template-columns:repeat(5,minmax(0,1fr))}
+@media (max-width:520px){.rw-row .r5{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .dims{font-size:1rem;font-weight:500;text-align:center}
 .tabs{display:flex;gap:6px;flex-wrap:wrap}
 .tabs button[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
@@ -214,6 +219,7 @@ th.opt{text-align:right}
   <button type="button" data-page="ship" aria-pressed="false" hidden>Shipping Comparison</button>
   <button type="button" data-page="boxes" aria-pressed="false" hidden>Box finder</button>
   <button type="button" data-page="labels" aria-pressed="false" hidden>Multi box label</button>
+  <button type="button" data-page="redwood" aria-pressed="false" hidden>Redwood</button>
 </nav>
 <div id="builderPage" class="col" style="gap:20px">
 <header>
@@ -485,6 +491,53 @@ th.opt{text-align:right}
       <div class="lb-prev"><iframe id="lbFrame" title="Label preview" tabindex="-1"></iframe></div>
     </section>
   </div>
+</div>
+</div>
+<!-- REDWOOD PACKAGING CONFIGURATOR (Admins) -->
+<div id="redwoodPage" class="col" style="gap:20px" hidden>
+<header>
+  <div>
+    <h1>Redwood</h1>
+    <p class="sub">Packaging configurator. Enter a Redwood bill of materials with each item's packaged size and weight, and get the smallest overpack that holds it all, a picture of how it packs, and the closest company and Uline boxes.</p>
+  </div>
+  <div class="hdr-actions"><button id="rwExample" type="button">Load example</button>
+    <button id="rwClear" type="button">Clear list</button></div>
+</header>
+<div class="grid">
+  <div class="col">
+    <section class="panel" aria-labelledby="rwBomH">
+      <div class="panel-head"><div><div class="step">Step 1</div><h2 id="rwBomH">Bill of materials</h2></div>
+        <button id="rwAdd" type="button">+ Add item</button></div>
+      <div class="lib">
+        <div class="lib-row">
+          <label for="rwSel">Saved Redwood items<select id="rwSel" disabled><option>Loading saved items...</option></select></label>
+          <button id="rwUse" type="button" disabled>Add to list</button>
+        </div>
+        <details id="rwManage" hidden><summary>Manage saved items</summary><div id="rwLibList" class="col"></div></details>
+        <p id="rwLibMsg" class="hint" role="status">Click Save on an item to keep its packaged size and weight. Typing a saved item number fills in the rest.</p>
+      </div>
+      <datalist id="rwNames"></datalist>
+      <p class="hint">Packaged size in inches (fractions like 9 1/2 work) and weight in pounds for one item. Qty is how many go in the overpack.</p>
+      <div id="rwList" class="col"></div>
+      <details id="rwPasteBox"><summary class="hint" style="cursor:pointer">Paste a bill of materials from a spreadsheet</summary>
+        <div class="col" style="gap:8px;margin-top:8px">
+          <label for="rwPaste">One item per line<textarea id="rwPaste" rows="5" spellcheck="false" placeholder="RW-1001	Side panel	48	24	2	18	2&#10;RW-1002	4"></textarea></label>
+          <p class="hint">Copy the rows straight from Excel. Use Item, Description, L, W, H, Weight, Qty, or just Item and Qty for items that are already saved.</p>
+          <div class="hdr-actions"><button id="rwPasteAdd" type="button" class="primary">Add these rows</button></div>
+          <p id="rwPasteMsg" class="hint" role="status"></p>
+        </div>
+      </details>
+    </section>
+    <section class="panel" aria-labelledby="rwOptH">
+      <div class="panel-head"><div><div class="step">Step 2</div><h2 id="rwOptH">Overpack</h2></div></div>
+      <label for="rwPad">Extra room per side (in)<input id="rwPad" type="number" min="0" step="0.125" value="0"></label>
+      <p class="hint">Adds space on every side of the packed items for padding or dunnage. 0.5 in per side makes the box 1 in bigger each way.</p>
+      <label class="check" for="rwUp"><input id="rwUp" type="checkbox"> Keep every item upright (height stays up)</label>
+      <label for="rwCount">Boxes to show<select id="rwCount"><option>3</option><option>4</option><option selected>5</option></select></label>
+      <p id="rwSrcMsg" class="hint" role="status">Loading box inventory...</p>
+    </section>
+  </div>
+  <div class="col" id="rwResults" aria-live="polite"></div>
 </div>
 </div>
 </div>
@@ -1981,7 +2034,7 @@ async function ulLoad(){
   try{const r=await fetch("uline-boxes.csv",{cache:"no-cache"});if(!r.ok)throw new Error(r.status);
     const p=bfParseCsv(await r.text());ul.rows=p.rows;ul.extra=p.extra;ul.state="ok"}
   catch(e){ul.state="failed"}
-  bfRun();
+  bfRun();rwInv();
 }
 function bfSrc(t,cls){const m=$("bfSrcMsg");m.textContent=t;m.className="hint"+(cls?" msg "+cls:"")}
 async function bfFetch(url,label){
@@ -2001,7 +2054,7 @@ async function bfFetch(url,label){
     bfLoadCsv(BF_SAMPLE,"the sample list");
     bfSrc(`Couldn't read the box inventory (${(e&&e.message)||e}). Showing a sample list instead.`,"err");
   }
-  bfRun();
+  bfRun();rwInv();
 }
 function bfInit(){
   ulLoad();
@@ -2011,7 +2064,7 @@ function bfInit(){
   if(sb&&PROFILE)return bfFetch("#site","the company box inventory");
   bfLoadCsv(BF_SAMPLE,"the sample list");
   bfSrc("Showing a sample list. The company box inventory isn't connected yet.");
-  bfRun();
+  bfRun();rwInv();
 }
 
 // Every way the product can sit in the box (6 turns, or 2 with height kept up).
@@ -2149,7 +2202,7 @@ $("bfUrlClear").addEventListener("click",()=>{lsSet(BF_KEY,"");bfInit()});
 $("bfFile").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;
   try{const n=bfLoadCsv(await f.text(),f.name);bfSrc(`${fmt(n)} boxes loaded from ${f.name}. Reload the page to go back to the shared list.`,"ok")}
   catch(err){bfSrc(`Couldn't read ${f.name}: ${err.message}`,"err")}
-  bfRun()});
+  bfRun();rwInv()});
 let bfStarted=false;
 
 /* 4 x 6 report: opens a new window laid out for a 4 x 6 in label, with Print and Copy image buttons.
@@ -2391,12 +2444,366 @@ $("lbPrint").addEventListener("click",()=>{
   say(w?"":"The browser blocked the print window. Allow pop-ups for this site and try again.");
 });
 
+/* ---------- REDWOOD PACKAGING CONFIGURATOR (Admins) ----------
+   A bill of materials (item, packaged L x W x H, weight, qty) is packed into one overpack.
+   Packing uses extreme points: each item, largest first, tries every corner left by the items
+   already placed and every allowed turn, slides back toward the box corner, and takes the spot
+   that keeps the packed block smallest. The smallest box is found by packing into a range of
+   floor sizes with the height left open. Company and Uline boxes are then each test-packed. */
+const RW_KEY="tihi.redwood.v1",RW_MAX_UNITS=250,RW_ULINE_MAX_LB=65;
+const RW_EXAMPLE=[
+  {item:"EX-100",desc:"Example side panel",L:"36",W:"18",H:"2",wt:"14",qty:"2"},
+  {item:"EX-200",desc:"Example shelf",L:"30",W:"14",H:"1 1/2",wt:"6",qty:"3"},
+  {item:"EX-300",desc:"Example hardware kit",L:"10",W:"8",H:"4",wt:"3",qty:"1"},
+  {item:"EX-400",desc:"Example top",L:"36",W:"16",H:"1",wt:"9",qty:"1"}];
+let rw={rows:[],pad:0,up:false,count:5},rwLast=null,rwView="ideal",rwTimer=0,rwStarted=false;
+let RWLIB=[],rwDelArm=null,rwLibStarted=false;
+const rwN=v=>bfN(Math.round(v*1000)/1000);
+const rwKey=s=>String(s).trim().toLowerCase();
+function rwSave(){try{localStorage.setItem(RW_KEY,JSON.stringify(rw))}catch(e){}}
+(function rwLoadState(){
+  try{const s=JSON.parse(localStorage.getItem(RW_KEY)||"null");if(s&&Array.isArray(s.rows))rw={...rw,...s}}catch(e){}
+  if(!rw.rows.length)rw.rows=[{item:"",desc:"",L:"",W:"",H:"",wt:"",qty:"1"}];
+  $("rwPad").value=rw.pad||0;$("rwUp").checked=!!rw.up;$("rwCount").value=String(rw.count||5);
+})();
+
+/* --- packing --- */
+const RW_E=1e-6;
+// distinct ways an item can sit: [along L, along W, up]
+function rwTurns(d,up){const seen=new Set(),out=[];
+  for(const t of bfTurns(up)){const o=[d[t[0]],d[t[1]],d[t[2]]],k=o.join("x");if(!seen.has(k)){seen.add(k);out.push(o)}}return out}
+const rwHit=(a,x,y,z,o)=>x<a.x+a.o[0]-RW_E&&a.x<x+o[0]-RW_E&&y<a.y+a.o[1]-RW_E&&a.y<y+o[1]-RW_E&&z<a.z+a.o[2]-RW_E&&a.z<z+o[2]-RW_E;
+const rwFree=(P,x,y,z,o)=>!P.some(a=>rwHit(a,x,y,z,o));
+// slide toward the corner: down, then back, then left, until it stops moving
+function rwSlide(P,x,y,z,o){
+  for(let n=0;n<12;n++){const x0=x,y0=y,z0=z;
+    let s=0;for(const a of P)if(x<a.x+a.o[0]-RW_E&&a.x<x+o[0]-RW_E&&y<a.y+a.o[1]-RW_E&&a.y<y+o[1]-RW_E&&a.z+a.o[2]<=z+RW_E)s=Math.max(s,a.z+a.o[2]);z=s;
+    s=0;for(const a of P)if(x<a.x+a.o[0]-RW_E&&a.x<x+o[0]-RW_E&&z<a.z+a.o[2]-RW_E&&a.z<z+o[2]-RW_E&&a.y+a.o[1]<=y+RW_E)s=Math.max(s,a.y+a.o[1]);y=s;
+    s=0;for(const a of P)if(y<a.y+a.o[1]-RW_E&&a.y<y+o[1]-RW_E&&z<a.z+a.o[2]-RW_E&&a.z<z+o[2]-RW_E&&a.x+a.o[0]<=x+RW_E)s=Math.max(s,a.x+a.o[0]);x=s;
+    if(x===x0&&y===y0&&z===z0)break}
+  return [x,y,z];
+}
+// units: [{k (BOM row), d:[l,w,h]}], C: inside size {L,W,H}. Returns placed items, or null if something doesn't fit.
+function rwPack(units,C,up){
+  const P=[];let eps=[[0,0,0]],bx=0,by=0,bz=0;
+  for(const u of units){
+    let best=null;
+    for(const o of rwTurns(u.d,up)){
+      if(o[0]>C.L+RW_E||o[1]>C.W+RW_E||o[2]>C.H+RW_E)continue;
+      for(const e of eps){
+        if(e[0]+o[0]>C.L+RW_E||e[1]+o[1]>C.W+RW_E||e[2]+o[2]>C.H+RW_E||!rwFree(P,e[0],e[1],e[2],o))continue;
+        const [x,y,z]=rwSlide(P,e[0],e[1],e[2],o);
+        const X=Math.max(bx,x+o[0]),Y=Math.max(by,y+o[1]),Z=Math.max(bz,z+o[2]);
+        const sc=[X*Y*Z,z+o[2],y,x];
+        if(!best||sc[0]<best.sc[0]-RW_E||(Math.abs(sc[0]-best.sc[0])<=RW_E&&(sc[1]<best.sc[1]-RW_E||(Math.abs(sc[1]-best.sc[1])<=RW_E&&(sc[2]<best.sc[2]-RW_E||(Math.abs(sc[2]-best.sc[2])<=RW_E&&sc[3]<best.sc[3]))))))
+          best={x,y,z,o,sc};
+      }
+    }
+    if(!best)return null;
+    const {x,y,z,o}=best;P.push({k:u.k,x,y,z,o});
+    bx=Math.max(bx,x+o[0]);by=Math.max(by,y+o[1]);bz=Math.max(bz,z+o[2]);
+    eps.push([x+o[0],y,z],[x,y+o[1],z],[x,y,z+o[2]]);
+    const seen=new Set();
+    eps=eps.filter(e=>{const k=e.map(v=>v.toFixed(4)).join();if(seen.has(k)||e[0]>=C.L-RW_E||e[1]>=C.W-RW_E||e[2]>=C.H-RW_E)return false;seen.add(k);
+      return !P.some(a=>e[0]>=a.x-RW_E&&e[0]<a.x+a.o[0]-RW_E&&e[1]>=a.y-RW_E&&e[1]<a.y+a.o[1]-RW_E&&e[2]>=a.z-RW_E&&e[2]<a.z+a.o[2]-RW_E)})
+      .sort((a,b)=>a[2]-b[2]||a[1]-b[1]||a[0]-b[0]);
+  }
+  return P;
+}
+const rwExt=P=>[0,1,2].map(i=>Math.max(0,...P.map(a=>[a.x,a.y,a.z][i]+a.o[i])));
+// The smallest box the heuristic finds: pack into many floor sizes (height open), keep the smallest block.
+function rwSmallest(units,up){
+  const dims=new Set(),add=v=>{if(v>0)dims.add(Math.round(v*16)/16)};
+  const big=units.slice(0,8);
+  units.forEach(u=>u.d.forEach(add));
+  big.forEach((a,i)=>big.forEach((b,j)=>{if(j>i)a.d.forEach(p=>b.d.forEach(q=>add(p+q)))}));
+  const vol=units.reduce((s,u)=>s+u.d[0]*u.d[1]*u.d[2],0),cr=Math.cbrt(vol);
+  [1,1.25,1.5,2].forEach(f=>add(cr*f));
+  // smallest floor side that every item can still sit on
+  const need=Math.max(...units.map(u=>Math.min(...rwTurns(u.d,up).map(o=>Math.min(o[0],o[1]))))),
+        need2=Math.max(...units.map(u=>Math.min(...rwTurns(u.d,up).map(o=>Math.max(o[0],o[1])))));
+  let S=[...dims].filter(v=>v>=need-RW_E).sort((a,b)=>a-b);
+  const cap=units.length>120?16:units.length>60?24:40;
+  if(S.length>cap){const k=S.length/cap;S=Array.from({length:cap},(_,i)=>S[Math.floor(i*k)]).concat(S[S.length-1])}
+  // try floor sizes closest to a cube first, so a big list still gets a sensible answer within the time limit
+  const pairs=[];S.forEach((L,i)=>S.forEach((W,j)=>{if(j<=i&&L>=need2-RW_E)pairs.push([L,W])}));
+  const g=Math.cbrt(vol*1.15);pairs.sort((a,b)=>Math.abs(Math.log(a[0]/g))+Math.abs(Math.log(a[1]/g))-Math.abs(Math.log(b[0]/g))-Math.abs(Math.log(b[1]/g)));
+  const found=[];const t0=performance.now();
+  for(const [L,W] of pairs){
+    if(performance.now()-t0>1500&&found.length)break;
+    const P=rwPack(units,{L,W,H:1e6},up);if(!P)continue;
+    const e=rwExt(P);found.push({P,e,v:e[0]*e[1]*e[2],a:e[0]*e[1]+e[1]*e[2]+e[0]*e[2]});
+  }
+  if(!found.length)return null;
+  // Among packs within 8% of the smallest volume, take the least cardboard (smallest surface).
+  // That favors flat, stackable boxes over thin slabs of nearly the same volume.
+  const minV=Math.min(...found.map(f=>f.v));
+  return found.filter(f=>f.v<=minV*1.08+RW_E).sort((a,b)=>a.a-b.a||a.e[2]-b.e[2])[0];
+}
+// test-pack a list of boxes, smallest first; returns up to `count` boxes that hold everything
+function rwSearch(rows,units,up,pad,count,vol){
+  const fits=[];
+  const cand=rows.map(b=>({b,in:{L:b.L-2*pad,W:b.W-2*pad,H:b.H-2*pad},vol:b.L*b.W*b.H}))
+    .filter(x=>x.in.L>0&&x.in.W>0&&x.in.H>0&&x.in.L*x.in.W*x.in.H>=vol-RW_E).sort((a,c)=>a.vol-c.vol);
+  let tried=0;
+  for(const x of cand){
+    if(fits.length>=count||tried>=80)break;
+    // a box turned on its side can work when items may lie down
+    const turns=up?[[x.in.L,x.in.W,x.in.H]]:[[x.in.L,x.in.W,x.in.H],[x.in.L,x.in.H,x.in.W],[x.in.W,x.in.H,x.in.L]];
+    let P=null;
+    for(const t of turns){if(units.some(u=>!bfFit(u.d,{L:t[0],W:t[1],H:t[2]},up)))continue;tried++;P=rwPack(units,{L:t[0],W:t[1],H:t[2]},up);if(P){x.turn=t;break}}
+    if(P)fits.push({...x,P});
+  }
+  return fits;
+}
+
+/* --- drawing --- */
+function rwIsoSVG(C,P,label){
+  const c=Math.cos(Math.PI/6),pr=(x,y,z)=>[(x-y)*c,(x+y)*0.5-z];
+  let minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9;
+  const pt=(x,y,z)=>{const q=pr(x,y,z);minX=Math.min(minX,q[0]);maxX=Math.max(maxX,q[0]);minY=Math.min(minY,q[1]);maxY=Math.max(maxY,q[1]);return q[0].toFixed(2)+","+q[1].toFixed(2)};
+  const poly=(pts,fill,extra="")=>`<polygon points="${pts.map(p=>pt(...p)).join(" ")}" fill="${fill}" ${extra}/>`;
+  const line=(a,b,extra)=>`<polyline points="${pt(...a)} ${pt(...b)}" fill="none" ${extra}/>`;
+  const sw=Math.max(.4,Math.max(C.L,C.W,C.H)/160);
+  const faces=(x,y,z,w,h,d,fill)=>{const X=x+w,Y=y+h,Z=z+d,st=`stroke="rgba(0,0,0,.45)" stroke-width="${sw}" stroke-linejoin="round"`;
+    return poly([[x,y,Z],[X,y,Z],[X,Y,Z],[x,Y,Z]],fill,st)+
+      poly([[X,y,z],[X,Y,z],[X,Y,Z],[X,y,Z]],fill,st)+poly([[X,y,z],[X,Y,z],[X,Y,Z],[X,y,Z]],"#000",'opacity=".2"')+
+      poly([[x,Y,z],[X,Y,z],[X,Y,Z],[x,Y,Z]],fill,st)+poly([[x,Y,z],[X,Y,z],[X,Y,Z],[x,Y,Z]],"#000",'opacity=".36"')};
+  const {L,W,H}=C,box=`stroke="var(--muted)" stroke-width="${sw*1.6}"`;
+  // back walls and floor of the box, then items back to front, then the box's front edges
+  let s=poly([[0,0,0],[L,0,0],[L,W,0],[0,W,0]],"var(--pallet)",'opacity=".18"')+poly([[0,0,0],[L,0,0],[L,0,H],[0,0,H]],"var(--pallet)",'opacity=".12"')+
+    poly([[0,0,0],[0,W,0],[0,W,H],[0,0,H]],"var(--pallet)",'opacity=".08"');
+  s+=line([0,0,0],[L,0,0],box)+line([0,0,0],[0,W,0],box)+line([0,0,0],[0,0,H],box);
+  // draw order: a box goes before any box it is behind (lower on some axis with no overlap)
+  const n=P.length,behind=(a,b)=>a.x+a.o[0]<=b.x+RW_E||a.y+a.o[1]<=b.y+RW_E||a.z+a.o[2]<=b.z+RW_E;
+  const order=[],done=new Array(n).fill(false);
+  for(let r=0;r<n;r++){let pick=-1;
+    for(let i=0;i<n&&pick<0;i++){if(done[i])continue;let ok=true;
+      for(let j=0;j<n&&ok;j++)if(j!==i&&!done[j]&&behind(P[j],P[i])&&!behind(P[i],P[j]))ok=false;
+      if(ok)pick=i}
+    if(pick<0)pick=done.indexOf(false);done[pick]=true;order.push(P[pick])}
+  order.forEach(a=>{s+=faces(a.x,a.y,a.z,a.o[0],a.o[1],a.o[2],color(a.k))});
+  const fe=`stroke="var(--ink)" stroke-width="${sw*1.6}" stroke-dasharray="${sw*5} ${sw*3}"`;
+  [[[L,0,0],[L,W,0]],[[0,W,0],[L,W,0]],[[L,0,0],[L,0,H]],[[0,W,0],[0,W,H]],[[L,W,0],[L,W,H]],
+   [[0,0,H],[L,0,H]],[[0,0,H],[0,W,H]],[[L,0,H],[L,W,H]],[[0,W,H],[L,W,H]]].forEach(([a,b])=>{s+=line(a,b,fe)});
+  // dimension labels just outside the front edges
+  const fs=Math.max(L,W,H)/13,off=fs*1.1,tx=(p,t)=>{const q=pr(...p);pt(...p);
+    minX=Math.min(minX,q[0]-fs*2.2);maxX=Math.max(maxX,q[0]+fs*2.2);maxY=Math.max(maxY,q[1]+fs*.4);minY=Math.min(minY,q[1]-fs);
+    return `<text x="${q[0].toFixed(1)}" y="${q[1].toFixed(1)}" font-size="${fs.toFixed(1)}" font-family="IBM Plex Mono,monospace" fill="var(--ink)" text-anchor="middle" dominant-baseline="middle">${t}</text>`};
+  s+=tx([L/2,W+off*1.6,0],"L "+rwN(L)+'"')+tx([L+off*1.6,W/2,0],"W "+rwN(W)+'"')+tx([L+off*1.4,-off*1.4,H/2],"H "+rwN(H)+'"');
+  const pad=fs;
+  return `<svg viewBox="${(minX-pad).toFixed(1)} ${(minY-pad).toFixed(1)} ${(maxX-minX+pad*2).toFixed(1)} ${(maxY-minY+pad*2).toFixed(1)}" role="img" aria-label="${esc(label)}">${s}</svg>`;
+}
+
+/* --- page --- */
+function rwUnits(){
+  const units=[],bad=[];let wt=0;
+  rw.rows.forEach((r,k)=>{
+    const d=[r.L,r.W,r.H].map(parseDim),q=Math.floor(num(r.qty,0)),w=num(r.wt,0);
+    const any=String(r.item).trim()||[r.L,r.W,r.H].some(v=>String(v).trim());
+    if(!any||q<=0)return;
+    if(d.some(v=>!(v>0))){bad.push(String(r.item).trim()||`Line ${k+1}`);return}
+    for(let i=0;i<q;i++)units.push({k,d});
+    wt+=Math.max(0,w)*q;
+  });
+  units.sort((a,b)=>b.d[0]*b.d[1]*b.d[2]-a.d[0]*a.d[1]*a.d[2]||Math.max(...b.d)-Math.max(...a.d)||a.k-b.k);
+  return {units,bad,wt};
+}
+function rwRenderRows(){
+  $("rwList").innerHTML=rw.rows.map((r,i)=>`<div class="item rw-row" data-i="${i}">
+    <div class="item-head"><span class="swatch" style="background:${color(i)}"></span>
+      <input data-f="item" value="${esc(r.item)}" list="rwNames" placeholder="Item number" aria-label="Item number, line ${i+1}" autocomplete="off" spellcheck="false">
+      <button type="button" class="save" data-rwsave="${i}"${sb&&PROFILE?"":" disabled"}>Save</button>
+      <button type="button" class="x" data-rwdel="${i}" aria-label="Remove line ${i+1}">✕</button></div>
+    <input data-f="desc" value="${esc(r.desc)}" placeholder="Description" aria-label="Description, line ${i+1}" autocomplete="off" style="font-family:var(--f-body)">
+    <div class="row r5">
+      <label>L in<input data-f="L" value="${esc(r.L)}" inputmode="decimal" autocomplete="off"></label>
+      <label>W in<input data-f="W" value="${esc(r.W)}" inputmode="decimal" autocomplete="off"></label>
+      <label>H in<input data-f="H" value="${esc(r.H)}" inputmode="decimal" autocomplete="off"></label>
+      <label>Wt lb<input data-f="wt" value="${esc(r.wt)}" inputmode="decimal" autocomplete="off"></label>
+      <label>Qty<input data-f="qty" value="${esc(r.qty)}" type="number" min="0" step="1"></label>
+    </div></div>`).join("");
+}
+function rwSchedule(){clearTimeout(rwTimer);rwTimer=setTimeout(rwRun,250)}
+function rwRun(){
+  rwSave();
+  try{rwCompute();rwRender()}catch(e){$("rwResults").innerHTML=`<div class="alert">Couldn't work out the overpack: ${esc(e.message)}</div>`}
+}
+function rwCompute(){
+  const {units,bad,wt}=rwUnits(),pad=Math.max(0,num(rw.pad,0)),up=!!rw.up,count=+rw.count||5;
+  rwLast={units,bad,wt,pad,up,count,ideal:null,co:[],ul:[],tooMany:units.length>RW_MAX_UNITS};
+  if(!units.length||rwLast.tooMany)return;
+  const vol=units.reduce((s,u)=>s+u.d[0]*u.d[1]*u.d[2],0);rwLast.vol=vol;
+  const best=rwSmallest(units,up);if(!best)return;
+  const e=best.e;
+  rwLast.ideal={P:best.P,e,box:{L:e[0]+2*pad,W:e[1]+2*pad,H:e[2]+2*pad}};
+  const usable=bf.rows.length&&bf.source!=="the sample list";
+  rwLast.coSample=!usable;
+  rwLast.co=rwSearch(bf.rows,units,up,pad,count,vol);
+  rwLast.ul=ul.state==="ok"?rwSearch(ul.rows,units,up,pad,count,vol):null;
+  if(!["ideal"].concat(rwLast.co.map((_,i)=>"co"+i),(rwLast.ul||[]).map((_,i)=>"ul"+i)).includes(rwView))rwView="ideal";
+}
+function rwPick(){
+  const L=rwLast;if(rwView.startsWith("co")&&L.co[+rwView.slice(2)])return {x:L.co[+rwView.slice(2)],src:"Company box"};
+  if(rwView.startsWith("ul")&&L.ul&&L.ul[+rwView.slice(2)])return {x:L.ul[+rwView.slice(2)],src:"Uline box"};
+  return null;
+}
+function rwCards(list,kind,src){
+  const L=rwLast,iv=L.ideal.box.L*L.ideal.box.W*L.ideal.box.H;
+  return `<div class="cards">`+list.map((x,i)=>{
+    const id=kind+i,on=rwView===id,tight=x.vol<iv-RW_E;
+    const pill=on?`<span class="pill mix">Showing</span>`:tight?`<span class="pill mix">Tighter</span>`:i===0?`<span class="pill mix">Best fit</span>`:`<span class="pill">#${i+1}</span>`;
+    const e=rwExt(x.P),room=x.turn.map((v,j)=>v-e[j]);
+    return bfCard({b:x.b},i,[["Packed block",e.map(rwN).join(" × ")+" in"],["Spare room L / W / H",room.map(rwN).join(" / ")+" in"],
+      ["Empty space",fmt(100*(1-L.vol/x.vol),0)+"%"]].concat(kind==="ul"&&L.wt>RW_ULINE_MAX_LB?[["Weight","Over 65 lb rating"]]:[]),src,pill)
+      .replace(/<\/div>$/,`<button type="button" data-rwview="${id}"${on?" disabled":""}>${on?"Shown above":"Show packing"}</button></div>`);
+  }).join("")+`</div>`;
+}
+function rwRender(){
+  const box=$("rwResults"),L=rwLast;
+  $("rwSrcMsg").textContent=bf.source?(rwLast&&rwLast.coSample?"The company box inventory isn't loaded, so company boxes come from a sample list. ":`Company boxes: ${fmt(bf.rows.length)} from ${bf.source}. `)+
+    (ul.state==="ok"?`Uline: ${fmt(ul.rows.length)} standard sizes.`:ul.state==="failed"?"The Uline list didn't load.":"Loading the Uline list..."):"Loading box inventory...";
+  let h="";
+  if(L.bad.length)h+=`<div class="alert">Enter L, W and H for ${L.bad.map(esc).join(", ")}. ${L.bad.length===1?"It is":"They are"} left out until then.</div>`;
+  if(L.tooMany){box.innerHTML=h+`<div class="alert">That's ${fmt(L.units.length)} items. The configurator packs up to ${RW_MAX_UNITS} in one overpack. Lower the quantities, or use the Shipment builder for pallet loads.</div>`;return}
+  if(!L.units.length){box.innerHTML=h+`<section class="panel"><div class="panel-head"><h2>Overpack</h2></div><p class="hint">Enter the items in the bill of materials, with a size and quantity for each, to see the box they need.</p></section>`;return}
+  if(!L.ideal){box.innerHTML=h+`<div class="alert">Couldn't find a way to pack these items.</div>`;return}
+  const I=L.ideal,ib=I.box,iv=ib.L*ib.W*ib.H,pick=rwPick();
+  const nItems=new Set(L.units.map(u=>u.k)).size;
+  h+=`<div class="tiles">
+    <div class="tile hl"><span class="k">Smallest box</span><span class="v">${[ib.L,ib.W,ib.H].map(rwN).join(" × ")}</span><span class="s">in inside${L.pad?`, with ${rwN(L.pad)} in per side`:""}</span></div>
+    <div class="tile"><span class="k">Pieces</span><span class="v">${fmt(L.units.length)}</span><span class="s">${nItems} item${nItems===1?"":"s"}</span></div>
+    <div class="tile"><span class="k">Contents weight</span><span class="v">${fmt(L.wt,1)}</span><span class="s">lb, before the box</span></div>
+    <div class="tile"><span class="k">Fill</span><span class="v">${fmt(100*L.vol/iv,0)}%</span><span class="s">${fmt(L.vol/1728,2)} of ${fmt(iv/1728,2)} cu ft</span></div></div>`;
+  // the packing picture: the calculated box, or a catalog box the user picked
+  const C=pick?{L:pick.x.turn[0],W:pick.x.turn[1],H:pick.x.turn[2]}:{L:I.e[0],W:I.e[1],H:I.e[2]},P=pick?pick.x.P:I.P;
+  const title=pick?`${pick.src}: ${esc(pick.x.b.name)}`:"Smallest overpack";
+  const dimsTxt=pick?`${bfDims(pick.x.b)} in inside`+(L.pad?`, items packed in ${[C.L,C.W,C.H].map(rwN).join(" × ")} after ${rwN(L.pad)} in per side`:""):
+    `${[ib.L,ib.W,ib.H].map(rwN).join(" × ")} in inside`+(L.pad?` (packed block ${I.e.map(rwN).join(" × ")} in + ${rwN(L.pad)} in per side)`:"");
+  h+=`<section class="panel"><div class="panel-head"><h2>${title}</h2>${pick?`<button type="button" data-rwview="ideal">Back to smallest box</button>`:`<span class="hint">${L.up?"Items kept upright":"Items may be turned any way"}</span>`}</div>
+    <div class="dims mono">${dimsTxt}</div>
+    <figure class="rw-iso">${rwIsoSVG(C,P,title+", "+[C.L,C.W,C.H].map(rwN).join(" by ")+" inches")}</figure>
+    <div class="legend">${rw.rows.map((r,k)=>L.units.some(u=>u.k===k)?`<span><i class="swatch" style="background:${color(k)}"></i>${esc(String(r.item).trim()||"Line "+(k+1))} × ${L.units.filter(u=>u.k===k).length}</span>`:"").join("")}</div>
+    <details><summary class="hint" style="cursor:pointer">Packing order (bottom layer first)</summary><div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>Item</th><th>Sits as L × W × H</th><th>From back corner (L, W, up)</th></tr></thead><tbody>
+      ${P.slice().sort((a,b)=>a.z-b.z||a.y-b.y||a.x-b.x).map((a,i)=>`<tr><td class="n">${i+1}</td><td><i class="swatch" style="display:inline-block;vertical-align:middle;margin-right:6px;background:${color(a.k)}"></i>${esc(String(rw.rows[a.k].item).trim()||"Line "+(a.k+1))}</td>
+        <td class="mono">${a.o.map(rwN).join(" × ")}</td><td class="mono">${[a.x,a.y,a.z].map(rwN).join(", ")}</td></tr>`).join("")}
+      </tbody></table></div></details>
+    <p class="hint">Sizes are inside dimensions. The picture is one way to pack the items, found by computer; a person may find a tighter one.</p></section>`;
+  // company boxes
+  h+=`<section class="panel"><div class="panel-head"><h2>Company boxes</h2><span class="hint">Smallest first</span></div>`;
+  if(L.coSample)h+=`<p class="hint">The company box inventory isn't loaded, so these come from a sample list. Open Box finder to check the inventory connection.</p>`;
+  h+=L.co.length?rwCards(L.co,"co",bf):`<div class="alert">No box in the ${L.coSample?"sample list":"inventory"} holds all of these items${L.pad?` with ${rwN(L.pad)} in per side`:""}.</div>`;
+  h+=`</section>`;
+  // Uline
+  h+=`<section class="panel"><div class="panel-head"><h2>Uline boxes</h2><span class="hint">200 lb test, inside dims</span></div>`;
+  if(!L.ul)h+=`<p class="hint">${ul.state==="failed"?"The Uline size list didn't load.":"Loading the Uline size list..."}</p>`;
+  else{
+    if(L.wt>RW_ULINE_MAX_LB)h+=`<div class="alert">The contents weigh ${fmt(L.wt,1)} lb. Uline's 200 lb test boxes are rated for up to ${RW_ULINE_MAX_LB} lb, so look at a heavier duty box.</div>`;
+    h+=L.ul.length?rwCards(L.ul,"ul",ul):`<div class="alert">None of the ${fmt(ul.rows.length)} Uline sizes in the list holds all of these items.</div>`;
+    const s=[ib.L,ib.W,ib.H].map(v=>Math.ceil(v-1e-9));if(!L.up)s.sort((a,b)=>b-a);
+    h+=`<p class="hint">Part numbers link to Uline. For a size not in the list, <a href="${BF_ULINE}" target="_blank" rel="noopener">search Uline</a> for <b class="mono">${s.join(" x ")}</b> or larger.</p>`;
+  }
+  box.innerHTML=h+`</section>`;
+}
+function rwInv(){if(rwStarted)rwSchedule()}
+
+/* saved Redwood items (table redwood_items, Admins only) */
+const rwLibMsg=t=>{$("rwLibMsg").textContent=t};
+function rwRenderLib(){
+  const sel=$("rwSel"),keep=sel.value,on=!!(sb&&PROFILE);
+  sel.innerHTML=RWLIB.length?RWLIB.map(it=>`<option value="${esc(it.id)}">${esc(it.item_no)}  (${rwN(it.L)}×${rwN(it.W)}×${rwN(it.H)} in, ${rwN(it.wt)} lb)</option>`).join("")
+    :`<option value="">${on?"No saved items yet":"Sign in to see saved items"}</option>`;
+  if(RWLIB.some(it=>it.id===keep))sel.value=keep;
+  $("rwNames").innerHTML=RWLIB.map(it=>`<option value="${esc(it.item_no)}">${esc(it.description||"")}</option>`).join("");
+  sel.disabled=$("rwUse").disabled=!RWLIB.length;
+  $("rwManage").hidden=!on||!RWLIB.length;
+  $("rwLibList").innerHTML=RWLIB.map(it=>`<div class="lib-item"><span>${esc(it.item_no)} <span class="mono">${esc(it.description||"")} · ${rwN(it.L)}×${rwN(it.W)}×${rwN(it.H)} in · ${rwN(it.wt)} lb</span></span>
+    <button type="button" class="x" data-rwlibdel="${esc(it.id)}">${rwDelArm===it.id?"Confirm remove":"Remove"}</button></div>`).join("");
+  document.querySelectorAll("#rwList button.save").forEach(b=>b.disabled=!on);
+}
+async function rwLoadLib(){
+  if(!sb||!PROFILE){RWLIB=[];rwRenderLib();return}
+  const {data,error}=await sb.from("redwood_items").select("id,item_no,description,length_in,width_in,height_in,weight_lb").order("item_no");
+  if(error){RWLIB=[];rwRenderLib();rwLibMsg(/redwood_items/.test(error.message||"")?"Saved Redwood items aren't set up in the database yet. Run supabase/redwood-items.sql once in the Supabase SQL Editor.":"Couldn't load the saved Redwood items.");return}
+  RWLIB=data.map(r=>({id:r.id,item_no:r.item_no,description:r.description,L:+r.length_in,W:+r.width_in,H:+r.height_in,wt:+r.weight_lb}));rwRenderLib();
+}
+const rwFromLib=(it,qty)=>({item:it.item_no,desc:it.description||"",L:String(it.L),W:String(it.W),H:String(it.H),wt:String(it.wt),qty:String(qty||1)});
+const rwBlank=r=>!String(r.item).trim()&&![r.desc,r.L,r.W,r.H,r.wt].some(v=>String(v).trim());
+function rwAddRows(list){
+  rw.rows=rw.rows.filter(r=>!rwBlank(r)).concat(list);
+  if(!rw.rows.length)rw.rows=[{item:"",desc:"",L:"",W:"",H:"",wt:"",qty:"1"}];
+  rwRenderRows();rwSchedule();
+}
+$("rwUse").addEventListener("click",()=>{const it=RWLIB.find(x=>x.id===$("rwSel").value);if(!it)return;
+  const ex=rw.rows.findIndex(r=>rwKey(r.item)===rwKey(it.item_no));
+  if(ex>=0){rw.rows[ex].qty=String(Math.floor(num(rw.rows[ex].qty,0))+1);rwRenderRows();rwSchedule();rwLibMsg(`${it.item_no} is already on the list, so its quantity went up by one.`);return}
+  rwAddRows([rwFromLib(it,1)]);rwLibMsg(`Added ${it.item_no}. Set the quantity.`);
+  const q=document.querySelector(`#rwList [data-i="${rw.rows.length-1}"] [data-f="qty"]`);if(q){q.focus();q.select()}});
+$("rwList").addEventListener("input",e=>{const f=e.target.dataset.f,row=e.target.closest("[data-i]");if(!f||!row)return;
+  rw.rows[+row.dataset.i][f]=e.target.value;rwSchedule()});
+// typing (or picking) a saved item number fills in its description, size and weight
+$("rwList").addEventListener("change",e=>{if(e.target.dataset.f!=="item")return;const i=+e.target.closest("[data-i]").dataset.i;
+  const it=RWLIB.find(x=>rwKey(x.item_no)===rwKey(e.target.value));if(!it)return;
+  rw.rows[i]=rwFromLib(it,rw.rows[i].qty||1);rwRenderRows();rwSchedule()});
+$("rwList").addEventListener("click",async e=>{
+  const d=e.target.dataset;
+  if(d.rwdel!==undefined){rw.rows.splice(+d.rwdel,1);if(!rw.rows.length)rw.rows=[{item:"",desc:"",L:"",W:"",H:"",wt:"",qty:"1"}];rwRenderRows();rwSchedule();return}
+  if(d.rwsave===undefined||!sb||!PROFILE)return;
+  const r=rw.rows[+d.rwsave],item=String(r.item).trim(),dm=[r.L,r.W,r.H].map(parseDim);
+  if(!item){rwLibMsg("Enter an item number to save.");return}
+  if(dm.some(v=>!(v>0))){rwLibMsg(`Enter L, W and H before saving ${item}.`);return}
+  const ex=RWLIB.find(x=>rwKey(x.item_no)===rwKey(item));
+  const row={item_no:item,description:String(r.desc).trim(),length_in:dm[0],width_in:dm[1],height_in:dm[2],weight_lb:Math.max(0,num(r.wt,0)),updated_by:PROFILE.id,updated_at:new Date().toISOString()};
+  e.target.disabled=true;
+  try{const q=ex?sb.from("redwood_items").update(row).eq("id",ex.id):sb.from("redwood_items").insert({...row,company_id:PROFILE.company_id});
+    const {error}=await q;if(error)throw error;await rwLoadLib();rwLibMsg((ex?"Updated ":"Saved ")+item+".")}
+  catch(err){rwLibMsg(/redwood_items/.test(err.message||"")?"Saved Redwood items aren't set up in the database yet. Run supabase/redwood-items.sql once in the Supabase SQL Editor.":"Couldn't save "+item+": "+(err.message||"try again in a moment."))}
+  finally{e.target.disabled=!(sb&&PROFILE)}
+});
+$("rwLibList").addEventListener("click",async e=>{
+  const id=e.target.dataset.rwlibdel;if(!id||!sb)return;
+  if(rwDelArm!==id){rwDelArm=id;rwRenderLib();return}
+  rwDelArm=null;
+  try{const {error}=await sb.from("redwood_items").delete().eq("id",id);if(error)throw error;await rwLoadLib();rwLibMsg("Removed.")}
+  catch(err){rwLibMsg("Couldn't remove that item.")}
+});
+$("rwAdd").addEventListener("click",()=>{rw.rows.push({item:"",desc:"",L:"",W:"",H:"",wt:"",qty:"1"});rwRenderRows();
+  const f=document.querySelector(`#rwList [data-i="${rw.rows.length-1}"] [data-f="item"]`);if(f)f.focus()});
+$("rwExample").addEventListener("click",()=>{rw.rows=RW_EXAMPLE.map(r=>({...r}));rwView="ideal";rwRenderRows();rwRun()});
+$("rwClear").addEventListener("click",()=>{rw.rows=[{item:"",desc:"",L:"",W:"",H:"",wt:"",qty:"1"}];rwView="ideal";rwRenderRows();rwRun()});
+$("rwPad").addEventListener("input",()=>{rw.pad=$("rwPad").value;rwSchedule()});
+$("rwUp").addEventListener("change",()=>{rw.up=$("rwUp").checked;rwRun()});
+$("rwCount").addEventListener("change",()=>{rw.count=+$("rwCount").value;rwRun()});
+$("rwResults").addEventListener("click",e=>{const v=e.target.dataset.rwview;if(!v||!rwLast)return;rwView=v;rwRender();
+  if(v!=="ideal")$("rwResults").scrollIntoView({behavior:"smooth",block:"start"})});
+// Pasted rows: Item, Description, L, W, H, Weight, Qty (tabs or commas), or Item and Qty for saved items.
+$("rwPasteAdd").addEventListener("click",()=>{
+  const lines=$("rwPaste").value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean),add=[],miss=[];
+  for(const l of lines){
+    const c=(l.includes("\t")?l.split("\t"):l.includes(",")?parseCsv(l)[0]||[]:l.split(/\s+/)).map(v=>String(v).trim());
+    let n=0;while(n<c.length-1&&parseDim(c[c.length-1-n])>=0&&String(c[c.length-1-n])!=="")n++;
+    const text=c.slice(0,c.length-n).filter(Boolean),nums=c.slice(c.length-n).map(parseDim);
+    if(!text.length){if(!nums.length)continue;miss.push(l);continue}
+    if(/^(item|part|item ?(no|number|#))$/i.test(text[0])&&!nums.length)continue; // header row
+    const item=text[0],desc=text.slice(1).join(" "),saved=RWLIB.find(x=>rwKey(x.item_no)===rwKey(item));
+    if(nums.length>=4){const [L,W,H,wt,qty]=nums;add.push({item,desc:desc||(saved?saved.description:""),L:String(L),W:String(W),H:String(H),wt:String(wt),qty:String(qty>0?Math.floor(qty):1)})}
+    else if(saved)add.push({...rwFromLib(saved,nums.length?Math.floor(nums[nums.length-1])||1:1),desc:desc||saved.description||""});
+    else{add.push({item,desc,L:"",W:"",H:"",wt:"",qty:String(nums.length?Math.floor(nums[nums.length-1])||1:1)});miss.push(item)}
+  }
+  if(!add.length){$("rwPasteMsg").textContent="No rows found. Put one item on each line.";return}
+  rwAddRows(add);$("rwPaste").value="";
+  $("rwPasteMsg").textContent=`Added ${add.length} line${add.length===1?"":"s"}.`+(miss.length?` Fill in the size for ${miss.join(", ")}: ${miss.length===1?"it isn't":"they aren't"} saved yet.`:"");
+});
+rwRenderRows();
+
 /* ---------- PAGES ---------- */
-const PAGES={builder:"builderPage",compare:"comparePage",ship:"shipPage",boxes:"boxesPage",labels:"labelsPage"};
-const PAGE_OK={builder:()=>true,compare:canBoxTools,ship:canBoxTools,boxes:canBoxTools,labels:canBoxTools};
+const PAGES={builder:"builderPage",compare:"comparePage",ship:"shipPage",boxes:"boxesPage",labels:"labelsPage",redwood:"redwoodPage"};
+const PAGE_OK={builder:()=>true,compare:canBoxTools,ship:canBoxTools,boxes:canBoxTools,labels:canBoxTools,redwood:canManage};
 function applyRole(){
   renderLib();
   LBLIB=[];lbLibStarted=false;lbRenderLib(); // reloads for this account when the label page opens
+  RWLIB=[];rwLibStarted=false;rwRenderLib();
   document.querySelectorAll(".pagenav button").forEach(b=>b.hidden=!PAGE_OK[b.dataset.page]());
   // show the page tabs whenever this role can open more than the builder
   document.querySelector(".pagenav").hidden=Object.keys(PAGE_OK).filter(k=>PAGE_OK[k]()).length<2;
@@ -2414,6 +2821,7 @@ function showPage(pg){
   for(const k in PAGES)$(PAGES[k]).hidden=pg!==k;
   if(pg==="boxes"&&!bfStarted){bfStarted=true;bfInit()}
   if(pg==="labels"){lbRender();if(!lbLibStarted&&PROFILE){lbLibStarted=true;lbLoadLib()}}
+  if(pg==="redwood"){if(!bfStarted){bfStarted=true;bfInit()}rwStarted=true;rwRun();if(!rwLibStarted&&PROFILE){rwLibStarted=true;rwLoadLib()}}
   if(pg==="labels"&&!lbFocus){lbFocus=true;window.addEventListener("focus",()=>{if(PROFILE&&!$("labelsPage").hidden)lbLoadLib()})}
   document.querySelectorAll(".pagenav button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.page===pg));
   const want=pg==="builder"?"":"#"+pg;
@@ -2423,7 +2831,7 @@ document.querySelector(".pagenav").addEventListener("click",e=>{const pg=e.targe
 window.addEventListener("hashchange",()=>showPage(location.hash.slice(1)));
 cmpRenderInputs();cmpRerender();showPage(location.hash.slice(1));
 
-window.__tihi={layerPattern,plan:()=>plan(),loadTruck:b=>loadTruck(b),state:()=>state,compare:()=>cmpCalc(),ship:()=>shipCalcAll(),boxFit:()=>bf};
+window.__tihi={layerPattern,plan:()=>plan(),loadTruck:b=>loadTruck(b),state:()=>state,compare:()=>cmpCalc(),ship:()=>shipCalcAll(),boxFit:()=>bf,rwPack,rwSmallest,rwLast:()=>rwLast};
 init();
 })();
 </script>
