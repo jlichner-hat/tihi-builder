@@ -439,6 +439,19 @@ th.opt{text-align:right}
     <section class="panel" aria-labelledby="bfSrcH">
       <div class="panel-head"><div><div class="step">Inventory</div><h2 id="bfSrcH">Box list</h2></div></div>
       <p id="bfSrcMsg" class="hint" role="status">Loading box inventory...</p>
+      <details id="bfAddBox"><summary class="hint" style="cursor:pointer">Add a box to the company inventory</summary>
+        <form id="bfAddForm" class="col" style="gap:8px;margin-top:8px" novalidate>
+          <label for="bfAddName">Box name or number<input id="bfAddName" autocomplete="off" maxlength="80"></label>
+          <div class="row r3">
+            <label for="bfAddL">Inside L in<input id="bfAddL" inputmode="decimal" autocomplete="off"></label>
+            <label for="bfAddW">Inside W in<input id="bfAddW" inputmode="decimal" autocomplete="off"></label>
+            <label for="bfAddH">Inside H in<input id="bfAddH" inputmode="decimal" autocomplete="off"></label>
+          </div>
+          <label for="bfAddNotes">Notes (optional)<input id="bfAddNotes" autocomplete="off" maxlength="200"></label>
+          <div class="hdr-actions"><button type="submit" class="primary">Add to company boxes</button></div>
+          <p id="bfAddMsg" class="hint" role="status">Adds a row to the box inventory Google Sheet.</p>
+        </form>
+      </details>
       <details id="bfSrcMore"><summary class="hint" style="cursor:pointer">Use a different list</summary>
         <div class="col" style="gap:8px;margin-top:8px">
           <label for="bfUrl">Google Sheet CSV link<input id="bfUrl" type="url" autocomplete="off" placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv"></label>
@@ -545,6 +558,8 @@ th.opt{text-align:right}
       <label for="rwPad">Extra room per side (in)<input id="rwPad" type="number" min="0" step="0.125" value="0"></label>
       <p class="hint">Adds space on every side of the packed items for padding or dunnage. 0.5 in per side makes the box 1 in bigger each way.</p>
       <label class="check" for="rwUp"><input id="rwUp" type="checkbox"> Keep every item upright (height stays up)</label>
+      <label for="rwYearly">Estimated yearly quantity<input id="rwYearly" type="number" min="0" step="1" placeholder="Overpacks a year"></label>
+      <p class="hint">How many of these overpacks ship in a year. It shows the pallets and the extra space each box choice adds up to over a year, to help decide whether a new box is worth adding to inventory.</p>
       <label for="rwCount">Boxes to show<select id="rwCount"><option>3</option><option>4</option><option selected>5</option></select></label>
       <p id="rwSrcMsg" class="hint" role="status">Loading box inventory...</p>
     </section>
@@ -553,6 +568,13 @@ th.opt{text-align:right}
       <label for="rwWall">Box wall<select id="rwWall"><option value="0.125">B-Flute (0.125 in)</option><option value="0.1875">C-Flute (0.1875 in)</option><option value="0.3125">BC-Flute (0.3125 in)</option></select></label>
       <p class="hint">Adds the wall thickness to each side of the inside size to get the outside size used for the Ti:Hi.</p>
       <div id="rwTihi" class="col" style="gap:10px"><p class="hint">Enter the bill of materials to see how the smallest overpack stacks on a pallet.</p></div>
+    </section>
+    <section class="panel" aria-labelledby="rwSavedH">
+      <div class="panel-head"><div><div class="step">Keep</div><h2 id="rwSavedH">Saved results</h2></div></div>
+      <div class="lib-row"><label for="rwSaveName">Name<input id="rwSaveName" autocomplete="off" placeholder="e.g. RW-1001 kit"></label>
+        <button id="rwSaveRes" type="button" class="primary">Save results</button></div>
+      <p id="rwSaveMsg" class="hint" role="status">Saves the bill of materials, overpack size, yearly quantity, Ti:Hi and best boxes for your company.</p>
+      <div id="rwSavedList" class="col" style="gap:0"></div>
     </section>
   </div>
   <div class="col" id="rwResults" aria-live="polite"></div>
@@ -2085,6 +2107,29 @@ async function bfFetch(url,label){
   }
   bfRun();rwInv();
 }
+/* Adds a box to the company inventory Google Sheet through the box-inventory function (POST),
+   which checks the role and passes it to the sheet's Apps Script (google/add-box.gs). */
+async function addBoxToSheet(box){
+  if(!sb||!PROFILE)throw new Error("sign in first");
+  const r=await fetch(CFG.url+"/functions/v1/box-inventory",{method:"POST",cache:"no-store",headers:{"Content-Type":"application/json",
+    apikey:CFG.anonKey,Authorization:"Bearer "+(((await sb.auth.getSession()).data.session||{}).access_token||"")},
+    body:JSON.stringify({name:box.name,length:box.L,width:box.W,height:box.H,notes:box.notes||""})});
+  const t=await r.text();if(!r.ok)throw new Error(t.slice(0,200)||"error "+r.status);
+  // show it right away; the sheet's published CSV catches up within a few minutes
+  if(bf.source==="the company box inventory"&&!bf.rows.some(b=>rwKey(b.name)===rwKey(box.name)))bf.rows.push({name:box.name,L:box.L,W:box.W,H:box.H,extra:[],url:""});
+  bfRun();rwInv();
+  return JSON.parse(t);
+}
+$("bfAddForm").addEventListener("submit",async e=>{e.preventDefault();
+  const m=$("bfAddMsg"),name=$("bfAddName").value.trim(),d=["bfAddL","bfAddW","bfAddH"].map(id=>parseDim($(id).value));
+  if(!name){m.textContent="Enter a box name or number.";return}
+  if(d.some(v=>!(v>0))){m.textContent="Enter the inside length, width and height.";return}
+  const btn=e.target.querySelector("button");btn.disabled=true;m.textContent="Adding...";
+  try{const r=await addBoxToSheet({name,L:d[0],W:d[1],H:d[2],notes:$("bfAddNotes").value.trim()});
+    m.textContent=`Added ${name} to the sheet${r.row?` (row ${r.row})`:""}. It's in the lists now; the shared sheet link updates within a few minutes.`;
+    ["bfAddName","bfAddL","bfAddW","bfAddH","bfAddNotes"].forEach(id=>$(id).value="")}
+  catch(err){m.textContent="Couldn't add the box: "+err.message}
+  finally{btn.disabled=false}});
 function bfInit(){
   ulLoad();
   const own=lsGet(BF_KEY);
@@ -2487,7 +2532,7 @@ const RW_EXAMPLE=[
   {item:"EX-200",desc:"Example shelf",L:"30",W:"14",H:"1 1/2",wt:"6",qty:"3"},
   {item:"EX-300",desc:"Example hardware kit",L:"10",W:"8",H:"4",wt:"3",qty:"1"},
   {item:"EX-400",desc:"Example top",L:"36",W:"16",H:"1",wt:"9",qty:"1"}];
-let rw={rows:[],pad:0,up:false,count:5,wall:"0.1875"},rwLast=null,rwView="ideal",rwTimer=0,rwStarted=false;
+let rw={rows:[],pad:0,up:false,count:5,wall:"0.1875",yearly:""},rwLast=null,rwView="ideal",rwTimer=0,rwStarted=false;
 let RWLIB=[],rwDelArm=null,rwLibStarted=false;
 const rwN=v=>bfN(Math.round(v*1000)/1000);
 const rwKey=s=>String(s).trim().toLowerCase();
@@ -2495,7 +2540,7 @@ function rwSave(){try{localStorage.setItem(RW_KEY,JSON.stringify(rw))}catch(e){}
 (function rwLoadState(){
   try{const s=JSON.parse(localStorage.getItem(RW_KEY)||"null");if(s&&Array.isArray(s.rows))rw={...rw,...s}}catch(e){}
   if(!rw.rows.length)rw.rows=[{item:"",desc:"",L:"",W:"",H:"",wt:"",qty:"1"}];
-  $("rwPad").value=rw.pad||0;$("rwUp").checked=!!rw.up;$("rwCount").value=String(rw.count||5);$("rwWall").value=String(rw.wall||"0.1875");if(!$("rwWall").value)$("rwWall").value="0.1875";
+  $("rwPad").value=rw.pad||0;$("rwUp").checked=!!rw.up;$("rwCount").value=String(rw.count||5);$("rwYearly").value=rw.yearly||"";$("rwWall").value=String(rw.wall||"0.1875");if(!$("rwWall").value)$("rwWall").value="0.1875";
 })();
 
 /* --- packing --- */
@@ -2702,7 +2747,7 @@ function rwCards(list,kind,src){
 }
 function rwRender(){
   const box=$("rwResults"),L=rwLast;
-  rwTihi();
+  L.tihi=rwTihi();
   $("rwSrcMsg").textContent=bf.source?(rwLast&&rwLast.coSample?"The company box inventory isn't loaded, so company boxes come from a sample list. ":`Company boxes: ${fmt(bf.rows.length)} from ${bf.source}. `)+
     (ul.state==="ok"?`Uline: ${fmt(ul.rows.length)} standard sizes.`:ul.state==="failed"?"The Uline list didn't load.":"Loading the Uline list..."):"Loading box inventory...";
   let h="";
@@ -2716,7 +2761,8 @@ function rwRender(){
     <div class="tile hl"><span class="k">Smallest box</span><span class="v">${[ib.L,ib.W,ib.H].map(rwN).join(" × ")}</span><span class="s">in inside${L.pad?`, with ${rwN(L.pad)} in per side`:""}</span></div>
     <div class="tile"><span class="k">Pieces</span><span class="v">${fmt(L.units.length)}</span><span class="s">${nItems} item${nItems===1?"":"s"}</span></div>
     <div class="tile"><span class="k">Contents weight</span><span class="v">${fmt(L.wt,1)}</span><span class="s">lb, before the box</span></div>
-    <div class="tile"><span class="k">Fill</span><span class="v">${fmt(100*L.vol/iv,0)}%</span><span class="s">${fmt(L.vol/1728,2)} of ${fmt(iv/1728,2)} cu ft</span></div></div>`;
+    <div class="tile"><span class="k">Fill</span><span class="v">${fmt(100*L.vol/iv,0)}%</span><span class="s">${fmt(L.vol/1728,2)} of ${fmt(iv/1728,2)} cu ft</span></div>
+    ${rwYear()?`<div class="tile"><span class="k">Yearly quantity</span><span class="v">${fmt(rwYear())}</span><span class="s">${L.tihi?`about ${fmt(Math.ceil(rwYear()/L.tihi.r.cases))} pallets a year`:"overpacks a year"}</span></div>`:""}</div>`;
   // the packing picture: the calculated box, or a catalog box the user picked
   const A=pick&&pick.alt?pick.alt:null,X=pick&&!A?pick.x:null;
   const C=X?{L:X.turn[0],W:X.turn[1],H:X.turn[2]}:{L:(A||I).e[0],W:(A||I).e[1],H:(A||I).e[2]},P=X?X.P:(A||I).P;
@@ -2732,7 +2778,10 @@ function rwRender(){
       ${P.slice().sort((a,b)=>a.z-b.z||a.y-b.y||a.x-b.x).map((a,i)=>`<tr><td class="n">${i+1}</td><td><i class="swatch" style="display:inline-block;vertical-align:middle;margin-right:6px;background:${color(a.k)}"></i>${esc(String(rw.rows[a.k].item).trim()||"Line "+(a.k+1))}</td>
         <td class="mono">${a.o.map(rwN).join(" × ")}</td><td class="mono">${[a.x,a.y,a.z].map(rwN).join(", ")}</td></tr>`).join("")}
       </tbody></table></div></details>
-    <p class="hint">Sizes are inside dimensions. The picture is one way to pack the items, found by computer; a person may find a tighter one.</p></section>`;
+    <p class="hint">Sizes are inside dimensions. The picture is one way to pack the items, found by computer; a person may find a tighter one.</p>
+    ${X?"":`<div class="lib"><div class="lib-row"><label for="rwBoxName">Add this size to the company box inventory<input id="rwBoxName" autocomplete="off" maxlength="80" value="${esc(rwBoxDefault(A||I))}"></label>
+      <button type="button" id="rwAddBox" data-l="${(A||I).box.L}" data-w="${(A||I).box.W}" data-h="${(A||I).box.H}">Add to company boxes</button></div>
+      <p id="rwAddMsg" class="hint" role="status">Adds ${[(A||I).box.L,(A||I).box.W,(A||I).box.H].map(rwN).join(" × ")} in (inside) as a new row in the box inventory Google Sheet.</p></div>`}</section>`;
   // two more box shapes the search found, drawn smaller under the main picture
   if(L.alts.length){
     const opt=(o,id,name)=>{const v=o.box.L*o.box.W*o.box.H,on=rwView===id;
@@ -2750,6 +2799,9 @@ function rwRender(){
   h+=`<section class="panel"><div class="panel-head"><h2>Company boxes</h2><span class="hint">Smallest first</span></div>`;
   if(L.coSample)h+=`<p class="hint">The company box inventory isn't loaded, so these come from a sample list. Open Box finder to check the inventory connection.</p>`;
   h+=L.co.length?rwCards(L.co,"co",bf):`<div class="alert">No box in the ${L.coSample?"sample list":"inventory"} holds all of these items${L.pad?` with ${rwN(L.pad)} in per side`:""}.</div>`;
+  if(rwYear()){const y=rwYear(),b0=L.co[0];
+    h+=`<p class="verdict">${b0?`At <b>${fmt(y)}</b> a year, ${esc(b0.b.name)} ships <b>${fmt((b0.vol-iv)*y/1728,0)} cu ft</b> more space a year than a new ${[ib.L,ib.W,ib.H].map(rwN).join(" × ")} box (${fmt(100*(b0.vol/iv-1),0)}% more per overpack).`:
+      `At <b>${fmt(y)}</b> a year, nothing in stock fits, so a new ${[ib.L,ib.W,ib.H].map(rwN).join(" × ")} box would be needed.`}</p>`}
   h+=`</section>`;
   // Uline
   h+=`<section class="panel"><div class="panel-head"><h2>Uline boxes</h2><span class="hint">200 lb test, inside dims</span></div>`;
@@ -2780,10 +2832,62 @@ function rwTihi(){
       <figure><figcaption>Layer, top view</figcaption>${layerSVG(r,0)}</figure></div>
     <dl class="kv"><dt>Overpacks per pallet</dt><dd>${fmt(r.cases)}</dd><dt>Outside size</dt><dd>${[b.L,b.W,b.H].map(rwN).join(" × ")} in</dd><dt>Box on pallet</dt><dd>${rwN(r.l)} × ${rwN(r.w)}, ${rwN(r.h)} in up</dd>
       <dt>Finished size</dt><dd>${fmt(dims.L,1)} × ${fmt(dims.W,1)} × ${fmt(build.height,1)} in</dd>
-      <dt>Gross weight</dt><dd>${fmt(r.cases*L.wt+num(p.tare),0)} lb</dd><dt>Limited by</dt><dd>${r.limitedBy}</dd></dl>
+      <dt>Gross weight</dt><dd>${fmt(r.cases*L.wt+num(p.tare),0)} lb</dd><dt>Limited by</dt><dd>${r.limitedBy}</dd>
+      ${rwYear()?`<dt>Pallets a year</dt><dd>${fmt(Math.ceil(rwYear()/r.cases))} for ${fmt(rwYear())}</dd>`:""}</dl>
     <p class="hint">${set}. Outside size is the smallest overpack's inside size plus ${esc(fl)} walls (${wall} in per side). Weight is the contents only.</p>`;
   return {r,build,p,o,dims,b,wall,fl};
 }
+const rwBoxDefault=o=>{const r=rw.rows.find(r=>String(r.item).trim());return (r?String(r.item).trim()+" overpack ":"Overpack ")+[o.box.L,o.box.W,o.box.H].map(v=>rwN(v)).join("x")};
+$("rwResults").addEventListener("click",async e=>{if(e.target.id!=="rwAddBox")return;
+  const b=e.target,m=$("rwAddMsg"),name=$("rwBoxName").value.trim();if(!name){m.textContent="Enter a name for the box.";return}
+  b.disabled=true;m.textContent="Adding...";
+  try{const r=await addBoxToSheet({name,L:+b.dataset.l,W:+b.dataset.w,H:+b.dataset.h,notes:"Added from Redwood"});
+    m.textContent=`Added ${name} to the box inventory sheet${r.row?` (row ${r.row})`:""}.`}
+  catch(err){m.textContent="Couldn't add the box: "+err.message;b.disabled=false}});
+/* Saved results (table redwood_results, Admins only) */
+let RWRES=[],rwResStarted=false,rwResArm=null;
+const rwResMsg=t=>{$("rwSaveMsg").textContent=t};
+const RW_NO_TABLE="Saved results aren't set up in the database yet. Run supabase/redwood-results.sql once in the Supabase SQL Editor.";
+function rwRenderSaved(){
+  $("rwSavedList").innerHTML=RWRES.length?RWRES.map(r=>`<div class="lib-item"><span>${esc(r.name)} <span class="mono">${[r.inside_l,r.inside_w,r.inside_h].map(v=>rwN(+v)).join("×")} in${r.yearly_qty?" · "+fmt(r.yearly_qty)+"/yr":""}${r.tihi?" · Ti:Hi "+esc(r.tihi):""} · ${new Date(r.created_at).toLocaleDateString()}</span></span>
+    <span class="hdr-actions" style="flex:none"><button type="button" class="save" data-rwload="${esc(r.id)}">Load</button><button type="button" class="x" data-rwresdel="${esc(r.id)}">${rwResArm===r.id?"Confirm remove":"Remove"}</button></span></div>`).join(""):`<p class="hint">Nothing saved yet.</p>`;
+}
+async function rwLoadSaved(){
+  if(!sb||!PROFILE){RWRES=[];rwRenderSaved();return}
+  const {data,error}=await sb.from("redwood_results").select("*").order("created_at",{ascending:false}).limit(100);
+  if(error){RWRES=[];rwRenderSaved();rwResMsg(/redwood_results/.test(error.message||"")?RW_NO_TABLE:"Couldn't load saved results.");return}
+  RWRES=data;rwRenderSaved();
+}
+$("rwSaveRes").addEventListener("click",async()=>{
+  if(!sb||!PROFILE){rwResMsg("Sign in to save results.");return}
+  clearTimeout(rwTimer);rwRun();const L=rwLast;if(!L||!L.ideal){rwResMsg("Enter the bill of materials first.");return}
+  const T=L.tihi,ib=L.ideal.box,first=rw.rows.find(r=>String(r.item).trim());
+  const name=$("rwSaveName").value.trim()||(first?String(first.item).trim():"Redwood overpack")+" "+new Date().toLocaleDateString();
+  const row={company_id:PROFILE.company_id,name,yearly_qty:rwYear()||null,pieces:L.units.length,contents_lb:+L.wt.toFixed(3),
+    inside_l:ib.L,inside_w:ib.W,inside_h:ib.H,wall_in:T?T.wall:null,outside_l:T?T.b.L:null,outside_w:T?T.b.W:null,outside_h:T?T.b.H:null,
+    fill_pct:+(100*L.vol/(ib.L*ib.W*ib.H)).toFixed(1),tihi:T?`${T.r.ti}:${T.r.hi}`:null,per_pallet:T?T.r.cases:null,
+    best_company_box:L.co[0]&&!L.coSample?L.co[0].b.name:null,best_uline_box:L.ul&&L.ul[0]?L.ul[0].b.name:null,
+    settings:{pad:rw.pad,up:rw.up,wall:rw.wall,count:rw.count},bom:rw.rows.filter(r=>!rwBlank(r)),created_by:PROFILE.id};
+  $("rwSaveRes").disabled=true;
+  try{const {error}=await sb.from("redwood_results").insert(row);if(error)throw error;await rwLoadSaved();rwResMsg(`Saved ${name}.`);$("rwSaveName").value=""}
+  catch(err){rwResMsg(/redwood_results/.test(err.message||"")?RW_NO_TABLE:"Couldn't save: "+(err.message||"try again in a moment."))}
+  finally{$("rwSaveRes").disabled=false}
+});
+$("rwSavedList").addEventListener("click",async e=>{
+  const ld=e.target.dataset.rwload,del=e.target.dataset.rwresdel;
+  if(ld){const r=RWRES.find(x=>x.id===ld);if(!r)return;const st=r.settings||{};
+    rw={...rw,rows:(r.bom||[]).map(x=>({item:x.item||"",desc:x.desc||"",L:x.L||"",W:x.W||"",H:x.H||"",wt:x.wt||"",qty:x.qty||"1"})),
+      pad:st.pad||0,up:!!st.up,wall:st.wall||rw.wall,count:st.count||rw.count,yearly:r.yearly_qty?String(r.yearly_qty):""};
+    if(!rw.rows.length)rw.rows=[{item:"",desc:"",L:"",W:"",H:"",wt:"",qty:"1"}];
+    $("rwPad").value=rw.pad;$("rwUp").checked=rw.up;$("rwWall").value=String(rw.wall);$("rwCount").value=String(rw.count);$("rwYearly").value=rw.yearly;
+    rwView="ideal";rwRenderRows();rwRun();rwResMsg(`Loaded ${r.name}.`);window.scrollTo(0,0);return}
+  if(!del)return;
+  if(rwResArm!==del){rwResArm=del;rwRenderSaved();return}
+  rwResArm=null;
+  try{const {error}=await sb.from("redwood_results").delete().eq("id",del);if(error)throw error;await rwLoadSaved();rwResMsg("Removed.")}
+  catch(err){rwResMsg("Couldn't remove that result.")}
+});
+const rwYear=()=>Math.max(0,Math.floor(num(rw.yearly,0)));
 function rwInv(){if(rwStarted)rwSchedule()}
 
 /* saved items: Redwood uses the company's shared saved items (table items), item number = name */
@@ -2846,7 +2950,8 @@ $("rwClear").addEventListener("click",()=>{rw.rows=[{item:"",desc:"",L:"",W:"",H
 $("rwPad").addEventListener("input",()=>{rw.pad=$("rwPad").value;rwSchedule()});
 $("rwUp").addEventListener("change",()=>{rw.up=$("rwUp").checked;rwRun()});
 $("rwCount").addEventListener("change",()=>{rw.count=+$("rwCount").value;rwRun()});
-$("rwWall").addEventListener("change",()=>{rw.wall=$("rwWall").value;rwSave();rwTihi()});
+$("rwWall").addEventListener("change",()=>{rw.wall=$("rwWall").value;rwSave();if(rwLast)rwRender()});
+$("rwYearly").addEventListener("input",()=>{rw.yearly=$("rwYearly").value;rwSave();if(rwLast)rwRender()});
 $("rwResults").addEventListener("click",e=>{const v=e.target.dataset.rwview;if(!v||!rwLast)return;rwView=v;rwRender();
   if(v!=="ideal")$("rwResults").scrollIntoView({behavior:"smooth",block:"start"})});
 // Pasted rows: Item, Description, L, W, H, Weight, Qty (tabs or commas), or Item and Qty for saved items.
@@ -2892,6 +2997,8 @@ async function buildRwPdf(){
   y+=62;
   doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...muted);
   doc.text(`Inside dimensions in inches.  ·  Extra room per side ${rwN(L.pad)} in  ·  ${L.up?"Items kept upright":"Items may be turned any way"}`,M,y);y+=16;
+  const T0=rwTihi();
+  if(rwYear()){doc.setFont("helvetica","bold");doc.setTextColor(...ink);doc.text(`Estimated yearly quantity: ${fmt(rwYear())} overpacks${T0?`, about ${fmt(Math.ceil(rwYear()/T0.r.cases))} pallets a year`:""}`,M,y);y+=16}
   if(L.bad.length){doc.setTextColor(180,64,31);doc.text(doc.splitTextToSize(`Left out (no size entered): ${L.bad.join(", ")}`,CW),M,y);y+=16}
   heading("Bill of materials");
   const used=rw.rows.map((r,k)=>({r,k,n:L.units.filter(u=>u.k===k).length})).filter(x=>x.n);
@@ -2944,6 +3051,9 @@ async function buildRwPdf(){
   heading("Company boxes that hold everything");
   if(L.coSample){doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...muted);doc.text("The company box inventory wasn't loaded, so these come from a sample list.",M,y);y+=14}
   if(L.co.length)table(["Box","Inside L x W x H","Packed block","Spare room L / W / H","Empty"],boxRows(L.co),[4]);
+  if(rwYear()){const yq=rwYear(),b0=L.co[0];doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...ink);
+    doc.text(doc.splitTextToSize(b0?`At ${fmt(yq)} a year, ${b0.b.name} ships ${fmt((b0.vol-iv)*yq/1728,0)} cu ft more space a year than a new ${x3(ib)} in box (${fmt(100*(b0.vol/iv-1),0)}% more per overpack).`:
+      `At ${fmt(yq)} a year, nothing in stock fits, so a new ${x3(ib)} in box would be needed.`,CW),M,y);y+=24}
   else{doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...ink);doc.text("No company box holds all of these items.",M,y);y+=18}
   heading("Uline boxes (200 lb test)");
   if(L.wt>RW_ULINE_MAX_LB){doc.setFont("helvetica","bold");doc.setFontSize(9);doc.setTextColor(180,64,31);
@@ -2964,7 +3074,7 @@ const PAGE_OK={builder:()=>true,compare:canBoxTools,ship:canBoxTools,boxes:canBo
 function applyRole(){
   renderLib();
   LBLIB=[];lbLibStarted=false;lbRenderLib(); // reloads for this account when the label page opens
-  RWLIB=[];rwLibStarted=false;rwRenderLib();
+  RWLIB=[];rwLibStarted=false;rwRenderLib();RWRES=[];rwResStarted=false;rwRenderSaved();
   document.querySelectorAll(".pagenav button").forEach(b=>b.hidden=!PAGE_OK[b.dataset.page]());
   // show the page tabs whenever this role can open more than the builder
   document.querySelector(".pagenav").hidden=Object.keys(PAGE_OK).filter(k=>PAGE_OK[k]()).length<2;
@@ -2982,7 +3092,7 @@ function showPage(pg){
   for(const k in PAGES)$(PAGES[k]).hidden=pg!==k;
   if(pg==="boxes"&&!bfStarted){bfStarted=true;bfInit()}
   if(pg==="labels"){lbRender();if(!lbLibStarted&&PROFILE){lbLibStarted=true;lbLoadLib()}}
-  if(pg==="redwood"){if(!bfStarted){bfStarted=true;bfInit()}rwStarted=true;rwRun();if(!rwLibStarted&&PROFILE){rwLibStarted=true;rwLoadLib()}}
+  if(pg==="redwood"){if(!bfStarted){bfStarted=true;bfInit()}rwStarted=true;rwRun();if(!rwLibStarted&&PROFILE){rwLibStarted=true;rwLoadLib()}if(!rwResStarted&&PROFILE){rwResStarted=true;rwLoadSaved()}}
   if(pg==="labels"&&!lbFocus){lbFocus=true;window.addEventListener("focus",()=>{if(PROFILE&&!$("labelsPage").hidden)lbLoadLib()})}
   document.querySelectorAll(".pagenav button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.page===pg));
   const want=pg==="builder"?"":"#"+pg;
