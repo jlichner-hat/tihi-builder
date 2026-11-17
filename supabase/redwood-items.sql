@@ -5,8 +5,8 @@
 
 create or replace function public.is_company_admin() returns boolean
 language sql stable security definer set search_path = public, extensions as $$
-  select public.is_app_admin() or exists (select 1 from public.profiles
-    where id = auth.uid() and role = 'company_admin')
+  select exists (select 1 from public.app_admins where user_id = auth.uid())
+      or exists (select 1 from public.profiles where id = auth.uid() and role = 'company_admin')
 $$;
 revoke execute on function public.is_company_admin() from public, anon;
 grant execute on function public.is_company_admin() to authenticated;
