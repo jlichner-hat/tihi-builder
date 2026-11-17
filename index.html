@@ -550,6 +550,8 @@ th.opt{text-align:right}
     </section>
     <section class="panel" aria-labelledby="rwTihiH">
       <div class="panel-head"><div><div class="step">Step 3</div><h2 id="rwTihiH">Ti:Hi of the overpack</h2></div></div>
+      <label for="rwWall">Box wall<select id="rwWall"><option value="0.125">B-Flute (0.125 in)</option><option value="0.1875">C-Flute (0.1875 in)</option><option value="0.3125">BC-Flute (0.3125 in)</option></select></label>
+      <p class="hint">Adds the wall thickness to each side of the inside size to get the outside size used for the Ti:Hi.</p>
       <div id="rwTihi" class="col" style="gap:10px"><p class="hint">Enter the bill of materials to see how the smallest overpack stacks on a pallet.</p></div>
     </section>
   </div>
@@ -2485,7 +2487,7 @@ const RW_EXAMPLE=[
   {item:"EX-200",desc:"Example shelf",L:"30",W:"14",H:"1 1/2",wt:"6",qty:"3"},
   {item:"EX-300",desc:"Example hardware kit",L:"10",W:"8",H:"4",wt:"3",qty:"1"},
   {item:"EX-400",desc:"Example top",L:"36",W:"16",H:"1",wt:"9",qty:"1"}];
-let rw={rows:[],pad:0,up:false,count:5},rwLast=null,rwView="ideal",rwTimer=0,rwStarted=false;
+let rw={rows:[],pad:0,up:false,count:5,wall:"0.1875"},rwLast=null,rwView="ideal",rwTimer=0,rwStarted=false;
 let RWLIB=[],rwDelArm=null,rwLibStarted=false;
 const rwN=v=>bfN(Math.round(v*1000)/1000);
 const rwKey=s=>String(s).trim().toLowerCase();
@@ -2493,7 +2495,7 @@ function rwSave(){try{localStorage.setItem(RW_KEY,JSON.stringify(rw))}catch(e){}
 (function rwLoadState(){
   try{const s=JSON.parse(localStorage.getItem(RW_KEY)||"null");if(s&&Array.isArray(s.rows))rw={...rw,...s}}catch(e){}
   if(!rw.rows.length)rw.rows=[{item:"",desc:"",L:"",W:"",H:"",wt:"",qty:"1"}];
-  $("rwPad").value=rw.pad||0;$("rwUp").checked=!!rw.up;$("rwCount").value=String(rw.count||5);
+  $("rwPad").value=rw.pad||0;$("rwUp").checked=!!rw.up;$("rwCount").value=String(rw.count||5);$("rwWall").value=String(rw.wall||"0.1875");if(!$("rwWall").value)$("rwWall").value="0.1875";
 })();
 
 /* --- packing --- */
@@ -2766,20 +2768,21 @@ const RW_TIHI_OPT={stackH:EXAMPLE.stackH,overhang:EXAMPLE.overhang,stackInclPall
 function rwTihi(){
   const L=rwLast,el=$("rwTihi");
   if(!L||!L.ideal){el.innerHTML=`<p class="hint">Enter the bill of materials to see how the smallest overpack stacks on a pallet.</p>`;return null}
-  const o=RW_TIHI_OPT,p={...EXAMPLE.pallets[0]},b=L.ideal.box,box={L:b.L,W:b.W,H:b.H,wt:L.wt};
+  const o=RW_TIHI_OPT,p={...EXAMPLE.pallets[0]},wall=Math.max(0,num($("rwWall").value,0.1875)),fl=$("rwWall").selectedOptions[0].textContent.replace(/ \(.*/,"");
+  const ib=L.ideal.box,b={L:ib.L+2*wall,W:ib.W+2*wall,H:ib.H+2*wall},box={...b,wt:L.wt};
   const r=tiHi(box,p,o),set=`${esc(p.name)} pallet, ${p.H} in tall, ${fmt(p.max)} lb max · ${o.stackH} in max stack height including the pallet · no overhang · box kept upright`;
-  if(!r||r.cases<1){el.innerHTML=`<div class="alert">The ${[b.L,b.W,b.H].map(rwN).join(" × ")} in overpack doesn't fit on a ${esc(p.name)} pallet within ${o.stackH} in.</div><p class="hint">${set}.</p>`;return null}
+  if(!r||r.cases<1){el.innerHTML=`<div class="alert">The ${[b.L,b.W,b.H].map(rwN).join(" × ")} in (outside) overpack doesn't fit on a ${esc(p.name)} pallet within ${o.stackH} in.</div><p class="hint">${set}.</p>`;return null}
   const extra=r.cases-r.ti*r.hi;
   const layers=Array.from({length:r.hi},()=>({sku:{idx:0},cases:r.ti,h:r.h,res:r})).concat(extra>0?[{sku:{idx:0},cases:extra,h:r.h,res:r}]:[]);
   const build={pallet:p,layers,height:p.H+layers.length*r.h,footL:p.L,id:"R"},dims=finishedDims(build,o);
   el.innerHTML=`<div class="tihi">${r.ti}:${r.hi}<small>TI : HI</small></div>
     <div class="figs"><figure><figcaption>Finished pallet</figcaption><div class="iso">${isoSVG(build,o,"Overpack pallet")}</div></figure>
       <figure><figcaption>Layer, top view</figcaption>${layerSVG(r,0)}</figure></div>
-    <dl class="kv"><dt>Overpacks per pallet</dt><dd>${fmt(r.cases)}</dd><dt>Box on pallet</dt><dd>${rwN(r.l)} × ${rwN(r.w)}, ${rwN(r.h)} in up</dd>
+    <dl class="kv"><dt>Overpacks per pallet</dt><dd>${fmt(r.cases)}</dd><dt>Outside size</dt><dd>${[b.L,b.W,b.H].map(rwN).join(" × ")} in</dd><dt>Box on pallet</dt><dd>${rwN(r.l)} × ${rwN(r.w)}, ${rwN(r.h)} in up</dd>
       <dt>Finished size</dt><dd>${fmt(dims.L,1)} × ${fmt(dims.W,1)} × ${fmt(build.height,1)} in</dd>
       <dt>Gross weight</dt><dd>${fmt(r.cases*L.wt+num(p.tare),0)} lb</dd><dt>Limited by</dt><dd>${r.limitedBy}</dd></dl>
-    <p class="hint">${set}. Uses the overpack's inside size and contents weight; the real box is a little bigger and heavier.</p>`;
-  return {r,build,p,o,dims};
+    <p class="hint">${set}. Outside size is the smallest overpack's inside size plus ${esc(fl)} walls (${wall} in per side). Weight is the contents only.</p>`;
+  return {r,build,p,o,dims,b,wall,fl};
 }
 function rwInv(){if(rwStarted)rwSchedule()}
 
@@ -2843,6 +2846,7 @@ $("rwClear").addEventListener("click",()=>{rw.rows=[{item:"",desc:"",L:"",W:"",H
 $("rwPad").addEventListener("input",()=>{rw.pad=$("rwPad").value;rwSchedule()});
 $("rwUp").addEventListener("change",()=>{rw.up=$("rwUp").checked;rwRun()});
 $("rwCount").addEventListener("change",()=>{rw.count=+$("rwCount").value;rwRun()});
+$("rwWall").addEventListener("change",()=>{rw.wall=$("rwWall").value;rwSave();rwTihi()});
 $("rwResults").addEventListener("click",e=>{const v=e.target.dataset.rwview;if(!v||!rwLast)return;rwView=v;rwRender();
   if(v!=="ideal")$("rwResults").scrollIntoView({behavior:"smooth",block:"start"})});
 // Pasted rows: Item, Description, L, W, H, Weight, Qty (tabs or commas), or Item and Qty for saved items.
@@ -2915,13 +2919,13 @@ async function buildRwPdf(){
     const [iso,lay]=await Promise.all([svgToPng(isoSVG(T.build,T.o,"Overpack pallet"),900),svgToPng(layerSVG(T.r,0),600)]);
     const fw=(CW-20)/2;let w=fw,h=w*iso.ratio;if(h>200){h=200;w=h/iso.ratio}doc.addImage(iso.data,"PNG",M+(fw-w)/2,y,w,h);
     let w2=fw*.7,h2=w2*lay.ratio;if(h2>110){h2=110;w2=h2/lay.ratio}doc.addImage(lay.data,"PNG",M+fw+20+(fw-w2)/2,y,w2,h2);
-    const ky=y+h2+20;const rows=[["Overpacks per pallet",fmt(T.r.cases)],["Box on pallet",`${rwN(T.r.l)} x ${rwN(T.r.w)}, ${rwN(T.r.h)} in up`],
+    const ky=y+h2+20;const rows=[["Overpacks per pallet",fmt(T.r.cases)],["Outside size",`${x3([T.b.L,T.b.W,T.b.H])} in (${T.fl})`],["Box on pallet",`${rwN(T.r.l)} x ${rwN(T.r.w)}, ${rwN(T.r.h)} in up`],
       ["Finished size",`${fmt(T.dims.L,1)} x ${fmt(T.dims.W,1)} x ${fmt(T.build.height,1)} in`],["Gross weight",fmt(T.r.cases*L.wt+num(T.p.tare),0)+" lb"],["Limited by",T.r.limitedBy]];
     doc.setFontSize(8.5);rows.forEach(([k,v],i)=>{doc.setFont("helvetica","normal");doc.setTextColor(...muted);doc.text(k,M+fw+20,ky+i*12);
       doc.setFont("courier","normal");doc.setTextColor(...ink);doc.text(String(v),M+CW,ky+i*12,{align:"right"})});
     y+=Math.max(h,h2+20+rows.length*12)+8;
     doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...muted);
-    doc.text(doc.splitTextToSize(`${T.p.name} pallet, ${T.o.stackH} in max stack height including the pallet, no overhang, box kept upright (Shipment builder defaults). Uses the overpack's inside size and contents weight.`,CW),M,y);y+=24}
+    doc.text(doc.splitTextToSize(`${T.p.name} pallet, ${T.o.stackH} in max stack height including the pallet, no overhang, box kept upright (Shipment builder defaults). Outside size is the inside size plus ${T.fl} walls (${T.wall} in per side); weight is the contents only.`,CW),M,y);y+=24}
   // other box shapes, three across
   const opts=[[I,"Option 1 (smallest)"]].concat(L.alts.map((o,i)=>[o,"Option "+(i+2)]));
   if(opts.length>1){
