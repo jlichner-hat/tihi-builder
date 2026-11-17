@@ -109,6 +109,7 @@ button:disabled{opacity:.5;cursor:default}
 .iso svg{max-height:240px;width:100%}
 .rw-iso{margin:0;padding:8px;background:var(--bg);border-radius:4px;display:flex;justify-content:center}
 .rw-iso svg{max-height:380px;width:100%}
+.rw-mini svg{max-height:180px}
 textarea{font:inherit;font-family:var(--f-mono);font-size:.85rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:6px 7px;width:100%;resize:vertical}
 .rw-row .r5{grid-template-columns:repeat(5,minmax(0,1fr))}
 @media (max-width:520px){.rw-row .r5{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -2559,7 +2560,16 @@ function rwSmallest(units,up){
   // Among packs within 8% of the smallest volume, take the least cardboard (smallest surface).
   // That favors flat, stackable boxes over thin slabs of nearly the same volume.
   const minV=Math.min(...found.map(f=>f.v));
-  return found.filter(f=>f.v<=minV*1.08+RW_E).sort((a,b)=>a.a-b.a||a.e[2]-b.e[2])[0];
+  const near=found.filter(f=>f.v<=minV*1.08+RW_E).sort((a,b)=>a.a-b.a||a.e[2]-b.e[2]);
+  const rest=found.filter(f=>f.v>minV*1.08+RW_E).sort((a,b)=>a.v-b.v||a.a-b.a);
+  // the best pack, plus the next two with a different box shape (for "other options")
+  const out=[],seen=new Set();
+  // others: least cardboard among packs up to 30% bigger than the smallest, then the rest by volume
+  const alt=found.filter(f=>f.v<=minV*1.3+RW_E).sort((a,b)=>a.a-b.a||a.v-b.v).concat(rest.filter(f=>f.v>minV*1.3+RW_E));
+  for(const f of near.slice(0,1).concat(alt)){const k=f.e.slice().sort((a,b)=>a-b).map(v=>v.toFixed(2)).join("x");
+    if(seen.has(k))continue;seen.add(k);out.push(f);if(out.length>=3)break}
+  out[0].alts=out.slice(1);
+  return out[0];
 }
 // test-pack a list of boxes, smallest first; returns up to `count` boxes that hold everything
 function rwSearch(rows,units,up,pad,count,vol){
@@ -2658,14 +2668,15 @@ function rwCompute(){
   const best=rwSmallest(units,up);if(!best)return;
   const e=best.e;
   rwLast.ideal={P:best.P,e,box:{L:e[0]+2*pad,W:e[1]+2*pad,H:e[2]+2*pad}};
+  rwLast.alts=(best.alts||[]).map(a=>({P:a.P,e:a.e,box:{L:a.e[0]+2*pad,W:a.e[1]+2*pad,H:a.e[2]+2*pad}}));
   const usable=bf.rows.length&&bf.source!=="the sample list";
   rwLast.coSample=!usable;
   rwLast.co=rwSearch(bf.rows,units,up,pad,count,vol);
   rwLast.ul=ul.state==="ok"?rwSearch(ul.rows,units,up,pad,count,vol):null;
-  if(!["ideal"].concat(rwLast.co.map((_,i)=>"co"+i),(rwLast.ul||[]).map((_,i)=>"ul"+i)).includes(rwView))rwView="ideal";
+  if(!["ideal"].concat(rwLast.alts.map((_,i)=>"alt"+i),rwLast.co.map((_,i)=>"co"+i),(rwLast.ul||[]).map((_,i)=>"ul"+i)).includes(rwView))rwView="ideal";
 }
 function rwPick(){
-  const L=rwLast;if(rwView.startsWith("co")&&L.co[+rwView.slice(2)])return {x:L.co[+rwView.slice(2)],src:"Company box"};
+  const L=rwLast;if(rwView.startsWith("alt")&&L.alts[+rwView.slice(3)])return {alt:L.alts[+rwView.slice(3)],n:+rwView.slice(3)+2};if(rwView.startsWith("co")&&L.co[+rwView.slice(2)])return {x:L.co[+rwView.slice(2)],src:"Company box"};
   if(rwView.startsWith("ul")&&L.ul&&L.ul[+rwView.slice(2)])return {x:L.ul[+rwView.slice(2)],src:"Uline box"};
   return null;
 }
@@ -2697,9 +2708,10 @@ function rwRender(){
     <div class="tile"><span class="k">Contents weight</span><span class="v">${fmt(L.wt,1)}</span><span class="s">lb, before the box</span></div>
     <div class="tile"><span class="k">Fill</span><span class="v">${fmt(100*L.vol/iv,0)}%</span><span class="s">${fmt(L.vol/1728,2)} of ${fmt(iv/1728,2)} cu ft</span></div></div>`;
   // the packing picture: the calculated box, or a catalog box the user picked
-  const C=pick?{L:pick.x.turn[0],W:pick.x.turn[1],H:pick.x.turn[2]}:{L:I.e[0],W:I.e[1],H:I.e[2]},P=pick?pick.x.P:I.P;
-  const title=pick?`${pick.src}: ${esc(pick.x.b.name)}`:"Smallest overpack";
-  const dimsTxt=pick?`${bfDims(pick.x.b)} in inside`+(L.pad?`, items packed in ${[C.L,C.W,C.H].map(rwN).join(" × ")} after ${rwN(L.pad)} in per side`:""):
+  const A=pick&&pick.alt?pick.alt:null,X=pick&&!A?pick.x:null;
+  const C=X?{L:X.turn[0],W:X.turn[1],H:X.turn[2]}:{L:(A||I).e[0],W:(A||I).e[1],H:(A||I).e[2]},P=X?X.P:(A||I).P;
+  const title=A?`Option ${pick.n}`:X?`${pick.src}: ${esc(X.b.name)}`:"Smallest overpack";
+  const dimsTxt=A?`${[A.box.L,A.box.W,A.box.H].map(rwN).join(" × ")} in inside · ${fmt(100*L.vol/(A.box.L*A.box.W*A.box.H),0)}% full`:X?`${bfDims(pick.x.b)} in inside`+(L.pad?`, items packed in ${[C.L,C.W,C.H].map(rwN).join(" × ")} after ${rwN(L.pad)} in per side`:""):
     `${[ib.L,ib.W,ib.H].map(rwN).join(" × ")} in inside`+(L.pad?` (packed block ${I.e.map(rwN).join(" × ")} in + ${rwN(L.pad)} in per side)`:"");
   h+=`<section class="panel"><div class="panel-head"><h2>${title}</h2>${pick?`<button type="button" data-rwview="ideal">Back to smallest box</button>`:`<span class="hint">${L.up?"Items kept upright":"Items may be turned any way"}</span>`}</div>
     <div class="dims mono">${dimsTxt}</div>
@@ -2711,6 +2723,19 @@ function rwRender(){
         <td class="mono">${a.o.map(rwN).join(" × ")}</td><td class="mono">${[a.x,a.y,a.z].map(rwN).join(", ")}</td></tr>`).join("")}
       </tbody></table></div></details>
     <p class="hint">Sizes are inside dimensions. The picture is one way to pack the items, found by computer; a person may find a tighter one.</p></section>`;
+  // two more box shapes the search found, drawn smaller under the main picture
+  if(L.alts.length){
+    const opt=(o,id,name)=>{const v=o.box.L*o.box.W*o.box.H,on=rwView===id;
+      return `<div class="card${on?" win":""}"><div class="panel-head"><h3>${name}</h3>${on?`<span class="pill mix">Showing</span>`:id==="ideal"?`<span class="pill mix">Smallest</span>`:`<span class="pill">+${fmt(Math.max(0,100*(v/iv-1)),0)}% volume</span>`}</div>
+        <div class="tihi" style="font-size:1.5rem">${[o.box.L,o.box.W,o.box.H].map(rwN).join(" × ")}<small>IN INSIDE</small></div>
+        <figure class="rw-iso rw-mini">${rwIsoSVG({L:o.e[0],W:o.e[1],H:o.e[2]},o.P,name+", "+[o.box.L,o.box.W,o.box.H].map(rwN).join(" by ")+" inches")}</figure>
+        <dl class="kv"><dt>Fill</dt><dd>${fmt(100*L.vol/v,0)}%</dd><dt>Volume</dt><dd>${fmt(v/1728,2)} cu ft</dd></dl>
+        <button type="button" data-rwview="${id}"${on?" disabled":""}>${on?"Shown above":"Show this one"}</button></div>`};
+    const list=[[I,"ideal","Option 1"]].concat(L.alts.map((o,i)=>[o,"alt"+i,"Option "+(i+2)]));
+    h+=`<section class="panel"><div class="panel-head"><h2>Other box shapes</h2><span class="hint">Next best ways to pack the same items</span></div>
+      <div class="cards">${list.filter(x=>x[1]!==rwView).map(x=>opt(...x)).join("")}</div>
+      <p class="hint">Option 1 is the smallest box found. The others use a little more room but may suit a box you already stock, a lower or narrower pack, or a different way to stack.</p></section>`;
+  }
   // company boxes
   h+=`<section class="panel"><div class="panel-head"><h2>Company boxes</h2><span class="hint">Smallest first</span></div>`;
   if(L.coSample)h+=`<p class="hint">The company box inventory isn't loaded, so these come from a sample list. Open Box finder to check the inventory connection.</p>`;
