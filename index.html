@@ -104,7 +104,7 @@ button:disabled{opacity:.5;cursor:default}
 .hdr-actions{display:flex;gap:8px;flex-wrap:wrap}
 .lb-prev{display:flex;justify-content:center;padding:12px;background:var(--soft);border-radius:4px}
 .lb-prev iframe{width:4in;height:6in;max-width:100%;border:0;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.18)}
-#pdfMsg,#cmpPdfMsg{width:100%;text-align:right}
+#pdfMsg,#cmpPdfMsg,#rwPdfMsg{width:100%;text-align:right}
 .iso{margin:0;padding:8px;background:var(--bg);border-radius:4px;display:flex;justify-content:center}
 .iso svg{max-height:240px;width:100%}
 .rw-iso{margin:0;padding:8px;background:var(--bg);border-radius:4px;display:flex;justify-content:center}
@@ -510,7 +510,10 @@ th.opt{text-align:right}
     <p class="sub">Packaging configurator. Enter a Redwood bill of materials with each item's packaged size and weight, and get the smallest overpack that holds it all, a picture of how it packs, and the closest company and Uline boxes.</p>
   </div>
   <div class="hdr-actions"><button id="rwExample" type="button">Load example</button>
-    <button id="rwClear" type="button">Clear list</button></div>
+    <button id="rwClear" type="button">Clear list</button>
+    <button id="rwPdfPrint" type="button">Print report</button>
+    <button id="rwPdfBtn" class="primary" type="button">Download PDF report</button></div>
+  <p id="rwPdfMsg" class="hint" role="status" hidden></p>
 </header>
 <div class="grid">
   <div class="col">
@@ -544,6 +547,12 @@ th.opt{text-align:right}
       <label class="check" for="rwUp"><input id="rwUp" type="checkbox"> Keep every item upright (height stays up)</label>
       <label for="rwCount">Boxes to show<select id="rwCount"><option>3</option><option>4</option><option selected>5</option></select></label>
       <p id="rwSrcMsg" class="hint" role="status">Loading box inventory...</p>
+    </section>
+    <section class="panel" aria-labelledby="rwTihiH">
+      <div class="panel-head"><div><div class="step">Step 3</div><h2 id="rwTihiH">Ti:Hi of the overpack</h2></div></div>
+      <label for="rwWall">Box wall<select id="rwWall"><option value="0.125">B-Flute (0.125 in)</option><option value="0.1875">C-Flute (0.1875 in)</option><option value="0.3125">BC-Flute (0.3125 in)</option></select></label>
+      <p class="hint">Adds the wall thickness to each side of the inside size to get the outside size used for the Ti:Hi.</p>
+      <div id="rwTihi" class="col" style="gap:10px"><p class="hint">Enter the bill of materials to see how the smallest overpack stacks on a pallet.</p></div>
     </section>
   </div>
   <div class="col" id="rwResults" aria-live="polite"></div>
@@ -2478,7 +2487,7 @@ const RW_EXAMPLE=[
   {item:"EX-200",desc:"Example shelf",L:"30",W:"14",H:"1 1/2",wt:"6",qty:"3"},
   {item:"EX-300",desc:"Example hardware kit",L:"10",W:"8",H:"4",wt:"3",qty:"1"},
   {item:"EX-400",desc:"Example top",L:"36",W:"16",H:"1",wt:"9",qty:"1"}];
-let rw={rows:[],pad:0,up:false,count:5},rwLast=null,rwView="ideal",rwTimer=0,rwStarted=false;
+let rw={rows:[],pad:0,up:false,count:5,wall:"0.1875"},rwLast=null,rwView="ideal",rwTimer=0,rwStarted=false;
 let RWLIB=[],rwDelArm=null,rwLibStarted=false;
 const rwN=v=>bfN(Math.round(v*1000)/1000);
 const rwKey=s=>String(s).trim().toLowerCase();
@@ -2486,7 +2495,7 @@ function rwSave(){try{localStorage.setItem(RW_KEY,JSON.stringify(rw))}catch(e){}
 (function rwLoadState(){
   try{const s=JSON.parse(localStorage.getItem(RW_KEY)||"null");if(s&&Array.isArray(s.rows))rw={...rw,...s}}catch(e){}
   if(!rw.rows.length)rw.rows=[{item:"",desc:"",L:"",W:"",H:"",wt:"",qty:"1"}];
-  $("rwPad").value=rw.pad||0;$("rwUp").checked=!!rw.up;$("rwCount").value=String(rw.count||5);
+  $("rwPad").value=rw.pad||0;$("rwUp").checked=!!rw.up;$("rwCount").value=String(rw.count||5);$("rwWall").value=String(rw.wall||"0.1875");if(!$("rwWall").value)$("rwWall").value="0.1875";
 })();
 
 /* --- packing --- */
@@ -2693,6 +2702,7 @@ function rwCards(list,kind,src){
 }
 function rwRender(){
   const box=$("rwResults"),L=rwLast;
+  rwTihi();
   $("rwSrcMsg").textContent=bf.source?(rwLast&&rwLast.coSample?"The company box inventory isn't loaded, so company boxes come from a sample list. ":`Company boxes: ${fmt(bf.rows.length)} from ${bf.source}. `)+
     (ul.state==="ok"?`Uline: ${fmt(ul.rows.length)} standard sizes.`:ul.state==="failed"?"The Uline list didn't load.":"Loading the Uline list..."):"Loading box inventory...";
   let h="";
@@ -2751,6 +2761,28 @@ function rwRender(){
     h+=`<p class="hint">Part numbers link to Uline. For a size not in the list, <a href="${BF_ULINE}" target="_blank" rel="noopener">search Uline</a> for <b class="mono">${s.join(" x ")}</b> or larger.</p>`;
   }
   box.innerHTML=h+`</section>`;
+}
+
+/* Ti:Hi of the smallest overpack, using the Shipment builder's default pallet and stack settings. */
+const RW_TIHI_OPT={stackH:EXAMPLE.stackH,overhang:EXAMPLE.overhang,stackInclPallet:EXAMPLE.stackInclPallet,allowTip:EXAMPLE.allowTip};
+function rwTihi(){
+  const L=rwLast,el=$("rwTihi");
+  if(!L||!L.ideal){el.innerHTML=`<p class="hint">Enter the bill of materials to see how the smallest overpack stacks on a pallet.</p>`;return null}
+  const o=RW_TIHI_OPT,p={...EXAMPLE.pallets[0]},wall=Math.max(0,num($("rwWall").value,0.1875)),fl=$("rwWall").selectedOptions[0].textContent.replace(/ \(.*/,"");
+  const ib=L.ideal.box,b={L:ib.L+2*wall,W:ib.W+2*wall,H:ib.H+2*wall},box={...b,wt:L.wt};
+  const r=tiHi(box,p,o),set=`${esc(p.name)} pallet, ${p.H} in tall, ${fmt(p.max)} lb max · ${o.stackH} in max stack height including the pallet · no overhang · box kept upright`;
+  if(!r||r.cases<1){el.innerHTML=`<div class="alert">The ${[b.L,b.W,b.H].map(rwN).join(" × ")} in (outside) overpack doesn't fit on a ${esc(p.name)} pallet within ${o.stackH} in.</div><p class="hint">${set}.</p>`;return null}
+  const extra=r.cases-r.ti*r.hi;
+  const layers=Array.from({length:r.hi},()=>({sku:{idx:0},cases:r.ti,h:r.h,res:r})).concat(extra>0?[{sku:{idx:0},cases:extra,h:r.h,res:r}]:[]);
+  const build={pallet:p,layers,height:p.H+layers.length*r.h,footL:p.L,id:"R"},dims=finishedDims(build,o);
+  el.innerHTML=`<div class="tihi">${r.ti}:${r.hi}<small>TI : HI</small></div>
+    <div class="figs"><figure><figcaption>Finished pallet</figcaption><div class="iso">${isoSVG(build,o,"Overpack pallet")}</div></figure>
+      <figure><figcaption>Layer, top view</figcaption>${layerSVG(r,0)}</figure></div>
+    <dl class="kv"><dt>Overpacks per pallet</dt><dd>${fmt(r.cases)}</dd><dt>Outside size</dt><dd>${[b.L,b.W,b.H].map(rwN).join(" × ")} in</dd><dt>Box on pallet</dt><dd>${rwN(r.l)} × ${rwN(r.w)}, ${rwN(r.h)} in up</dd>
+      <dt>Finished size</dt><dd>${fmt(dims.L,1)} × ${fmt(dims.W,1)} × ${fmt(build.height,1)} in</dd>
+      <dt>Gross weight</dt><dd>${fmt(r.cases*L.wt+num(p.tare),0)} lb</dd><dt>Limited by</dt><dd>${r.limitedBy}</dd></dl>
+    <p class="hint">${set}. Outside size is the smallest overpack's inside size plus ${esc(fl)} walls (${wall} in per side). Weight is the contents only.</p>`;
+  return {r,build,p,o,dims,b,wall,fl};
 }
 function rwInv(){if(rwStarted)rwSchedule()}
 
@@ -2814,6 +2846,7 @@ $("rwClear").addEventListener("click",()=>{rw.rows=[{item:"",desc:"",L:"",W:"",H
 $("rwPad").addEventListener("input",()=>{rw.pad=$("rwPad").value;rwSchedule()});
 $("rwUp").addEventListener("change",()=>{rw.up=$("rwUp").checked;rwRun()});
 $("rwCount").addEventListener("change",()=>{rw.count=+$("rwCount").value;rwRun()});
+$("rwWall").addEventListener("change",()=>{rw.wall=$("rwWall").value;rwSave();rwTihi()});
 $("rwResults").addEventListener("click",e=>{const v=e.target.dataset.rwview;if(!v||!rwLast)return;rwView=v;rwRender();
   if(v!=="ideal")$("rwResults").scrollIntoView({behavior:"smooth",block:"start"})});
 // Pasted rows: Item, Description, L, W, H, Weight, Qty (tabs or commas), or Item and Qty for saved items.
@@ -2835,6 +2868,95 @@ $("rwPasteAdd").addEventListener("click",()=>{
   $("rwPasteMsg").textContent=`Added ${add.length} line${add.length===1?"":"s"}.`+(miss.length?` Fill in the size for ${miss.join(", ")}: ${miss.length===1?"it isn't":"they aren't"} saved yet.`:"");
 });
 rwRenderRows();
+
+/* Redwood PDF report: logo header, BOM, the overpack shown on the page with its packing order,
+   the other box shapes, and the company and Uline boxes that hold everything. */
+async function buildRwPdf(){
+  clearTimeout(rwTimer);rwRun();const L=rwLast;
+  if(!L||!L.ideal)throw new Error("enter the bill of materials first, so there's an overpack to report");
+  const {jsPDF}=window.jspdf;const doc=new jsPDF({unit:"pt",format:"letter"});const PW=612,PH=792,M=40,CW=PW-2*M;
+  const ink=[29,35,43],muted=[91,102,114],date=new Date().toLocaleString(),x3=a=>a.map(rwN).join(" x ");
+  let y=await pdfHeader(doc,"Redwood Overpack","Packaging report  ·  "+date,PW,M);
+  const need=h=>{if(y+h>PH-50){doc.addPage();y=M}};
+  const heading=(t,next=0)=>{need(40+next);y+=6;doc.setFont("helvetica","bold");doc.setFontSize(13);doc.setTextColor(...ink);doc.text(t.toUpperCase(),M,y+12);
+    doc.setDrawColor(242,183,5);doc.setLineWidth(2);doc.line(M,y+18,M+CW,y+18);y+=30};
+  const table=(head,body,right)=>{doc.autoTable({startY:y,margin:{left:M,right:M,bottom:50},theme:"grid",styles:{fontSize:8.5,cellPadding:4,textColor:ink,lineColor:[211,216,222]},
+    headStyles:{fillColor:[29,35,43],textColor:255,fontStyle:"bold"},head:[head],body,columnStyles:Object.fromEntries((right||[]).map(i=>[i,{halign:"right"}]))});y=doc.lastAutoTable.finalY+16};
+  const name=k=>String(rw.rows[k].item).trim()||"Line "+(k+1);
+  const I=L.ideal,ib=[I.box.L,I.box.W,I.box.H],iv=I.box.L*I.box.W*I.box.H;
+  const tiles=[["Smallest box",x3(ib)+" in"],["Pieces",fmt(L.units.length)],["Contents weight",fmt(L.wt,1)+" lb"],["Fill",fmt(100*L.vol/iv,0)+"%"]],tw=(CW-30)/4;
+  tiles.forEach(([k,v],i)=>{const x=M+i*(tw+10);doc.setDrawColor(211,216,222);doc.setLineWidth(.8);doc.rect(x,y,tw,46);
+    doc.setFillColor(242,183,5);doc.rect(x,y+43,tw,3,"F");
+    doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...muted);doc.text(k.toUpperCase(),x+8,y+13);
+    doc.setFont("helvetica","bold");doc.setFontSize(i===0?13:17);doc.setTextColor(...ink);doc.text(String(v),x+8,y+34)});
+  y+=62;
+  doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...muted);
+  doc.text(`Inside dimensions in inches.  ·  Extra room per side ${rwN(L.pad)} in  ·  ${L.up?"Items kept upright":"Items may be turned any way"}`,M,y);y+=16;
+  if(L.bad.length){doc.setTextColor(180,64,31);doc.text(doc.splitTextToSize(`Left out (no size entered): ${L.bad.join(", ")}`,CW),M,y);y+=16}
+  heading("Bill of materials");
+  const used=rw.rows.map((r,k)=>({r,k,n:L.units.filter(u=>u.k===k).length})).filter(x=>x.n);
+  table(["Item","Description","L x W x H in","Wt lb","Qty","Total lb"],
+    used.map(({r,k,n})=>[name(k),String(r.desc||""),x3([r.L,r.W,r.H].map(parseDim)),fmt(num(r.wt,0),2),fmt(n),fmt(num(r.wt,0)*n,1)]),[3,4,5]);
+  // the overpack shown on the page (the smallest box unless another one was picked)
+  const pick=rwPick(),A=pick&&pick.alt?pick.alt:null,X=pick&&!A?pick.x:null;
+  const C=X?{L:X.turn[0],W:X.turn[1],H:X.turn[2]}:{L:(A||I).e[0],W:(A||I).e[1],H:(A||I).e[2]},P=X?X.P:(A||I).P;
+  const title=A?`Overpack option ${pick.n}`:X?`${pick.src}: ${X.b.name}`:"Smallest overpack";
+  const sz=X?`${x3([X.b.L,X.b.W,X.b.H])} in inside`:`${x3([(A||I).box.L,(A||I).box.W,(A||I).box.H])} in inside`;
+  heading(title,300);
+  doc.setFont("courier","bold");doc.setFontSize(12);doc.setTextColor(...ink);doc.text(sz,M,y+4);y+=14;
+  const img=await svgToPng(rwIsoSVG(C,P,title),1100);let iw=CW,ih=iw*img.ratio;if(ih>270){ih=270;iw=ih/img.ratio}
+  doc.addImage(img.data,"PNG",M+(CW-iw)/2,y,iw,ih);y+=ih+8;
+  doc.setFont("helvetica","normal");doc.setFontSize(8.5);let lx=M;
+  used.forEach(({k,n})=>{const t=`${name(k)} x ${n}`,w=doc.getTextWidth(t)+26;if(lx+w>M+CW){lx=M;y+=13}
+    doc.setFillColor(...hex(color(k)));doc.rect(lx,y-7,8,8,"F");doc.setTextColor(...ink);doc.text(t,lx+12,y);lx+=w});
+  y+=16;
+  heading("Packing order (bottom layer first)");
+  table(["#","Item","Sits as L x W x H","From back corner (L, W, up)"],
+    P.slice().sort((a,b)=>a.z-b.z||a.y-b.y||a.x-b.x).map((a,i)=>[i+1,name(a.k),x3(a.o),[a.x,a.y,a.z].map(rwN).join(", ")]),[0]);
+  // Ti:Hi of the smallest overpack on the builder's default pallet
+  const T=rwTihi();
+  if(T){heading(`Ti:Hi of the smallest overpack: ${T.r.ti}:${T.r.hi}`,230);
+    const [iso,lay]=await Promise.all([svgToPng(isoSVG(T.build,T.o,"Overpack pallet"),900),svgToPng(layerSVG(T.r,0),600)]);
+    const fw=(CW-20)/2;let w=fw,h=w*iso.ratio;if(h>200){h=200;w=h/iso.ratio}doc.addImage(iso.data,"PNG",M+(fw-w)/2,y,w,h);
+    let w2=fw*.7,h2=w2*lay.ratio;if(h2>110){h2=110;w2=h2/lay.ratio}doc.addImage(lay.data,"PNG",M+fw+20+(fw-w2)/2,y,w2,h2);
+    const ky=y+h2+20;const rows=[["Overpacks per pallet",fmt(T.r.cases)],["Outside size",`${x3([T.b.L,T.b.W,T.b.H])} in (${T.fl})`],["Box on pallet",`${rwN(T.r.l)} x ${rwN(T.r.w)}, ${rwN(T.r.h)} in up`],
+      ["Finished size",`${fmt(T.dims.L,1)} x ${fmt(T.dims.W,1)} x ${fmt(T.build.height,1)} in`],["Gross weight",fmt(T.r.cases*L.wt+num(T.p.tare),0)+" lb"],["Limited by",T.r.limitedBy]];
+    doc.setFontSize(8.5);rows.forEach(([k,v],i)=>{doc.setFont("helvetica","normal");doc.setTextColor(...muted);doc.text(k,M+fw+20,ky+i*12);
+      doc.setFont("courier","normal");doc.setTextColor(...ink);doc.text(String(v),M+CW,ky+i*12,{align:"right"})});
+    y+=Math.max(h,h2+20+rows.length*12)+8;
+    doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...muted);
+    doc.text(doc.splitTextToSize(`${T.p.name} pallet, ${T.o.stackH} in max stack height including the pallet, no overhang, box kept upright (Shipment builder defaults). Outside size is the inside size plus ${T.fl} walls (${T.wall} in per side); weight is the contents only.`,CW),M,y);y+=24}
+  // other box shapes, three across
+  const opts=[[I,"Option 1 (smallest)"]].concat(L.alts.map((o,i)=>[o,"Option "+(i+2)]));
+  if(opts.length>1){
+    heading("Other box shapes",210);
+    const fw=(CW-2*12)/3,pics=await Promise.all(opts.map(([o])=>svgToPng(rwIsoSVG({L:o.e[0],W:o.e[1],H:o.e[2]},o.P,"option"),600)));
+    opts.forEach(([o,nm],j)=>{const X0=M+j*(fw+12),v=o.box.L*o.box.W*o.box.H;
+      doc.setDrawColor(...(j===0?[242,183,5]:[211,216,222]));doc.setLineWidth(j===0?1.6:.8);doc.rect(X0,y,fw,200);
+      doc.setFont("helvetica","bold");doc.setFontSize(9.5);doc.setTextColor(...ink);doc.text(nm,X0+8,y+15);
+      doc.setFont("courier","bold");doc.setFontSize(10);doc.text(x3([o.box.L,o.box.W,o.box.H])+" in",X0+8,y+30);
+      const m=pics[j];let w=fw-16,h=w*m.ratio;if(h>120){h=120;w=h/m.ratio}doc.addImage(m.data,"PNG",X0+(fw-w)/2,y+38,w,h);
+      doc.setFont("helvetica","normal");doc.setFontSize(8.5);doc.setTextColor(...muted);
+      doc.text(`Fill ${fmt(100*L.vol/v,0)}%  ·  ${fmt(v/1728,2)} cu ft${j?`  ·  +${fmt(Math.max(0,100*(v/iv-1)),0)}%`:""}`,X0+8,y+190)});
+    y+=214;
+  }
+  const boxRows=list=>list.map(x=>{const e=rwExt(x.P);return [x.b.name,x3([x.b.L,x.b.W,x.b.H]),x3(e),x.turn.map((v,j)=>rwN(v-e[j])).join(" / "),fmt(100*(1-L.vol/x.vol),0)+"%"]});
+  heading("Company boxes that hold everything");
+  if(L.coSample){doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...muted);doc.text("The company box inventory wasn't loaded, so these come from a sample list.",M,y);y+=14}
+  if(L.co.length)table(["Box","Inside L x W x H","Packed block","Spare room L / W / H","Empty"],boxRows(L.co),[4]);
+  else{doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...ink);doc.text("No company box holds all of these items.",M,y);y+=18}
+  heading("Uline boxes (200 lb test)");
+  if(L.wt>RW_ULINE_MAX_LB){doc.setFont("helvetica","bold");doc.setFontSize(9);doc.setTextColor(180,64,31);
+    doc.text(`Contents weigh ${fmt(L.wt,1)} lb. Uline's 200 lb test boxes are rated for up to ${RW_ULINE_MAX_LB} lb.`,M,y);y+=14}
+  if(L.ul&&L.ul.length)table(["Part number","Inside L x W x H","Packed block","Spare room L / W / H","Empty"],boxRows(L.ul),[4]);
+  else{doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...ink);doc.text(L.ul?"None of the Uline sizes in the list holds all of these items.":"The Uline size list wasn't loaded.",M,y);y+=18}
+  need(30);doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...muted);
+  doc.text(doc.splitTextToSize("The packing pictures show one way to pack the items, found by computer. A person may find a tighter one. Check Uline prices and stock on uline.com.",CW),M,y);
+  pdfFooter(doc,`Redwood Overpack  ·  ${date}`,PW,PH,M);
+  return doc;
+}
+wirePdf({dl:"rwPdfBtn",pr:"rwPdfPrint",msg:"rwPdfMsg",build:buildRwPdf,
+  file:()=>`TiHi-Redwood-overpack-${slug((rw.rows.find(r=>String(r.item).trim())||{item:"bom"}).item)}-${today()}.pdf`});
 
 /* ---------- PAGES ---------- */
 const PAGES={builder:"builderPage",compare:"comparePage",ship:"shipPage",boxes:"boxesPage",labels:"labelsPage",redwood:"redwoodPage"};
