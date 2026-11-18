@@ -26,11 +26,12 @@ Deno.serve(async (req) => {
   if (userErr || !user) return reply(401, "Sign in to see the box inventory.");
 
   const [{ data: prof }, { data: adm }] = await Promise.all([
-    sb.from("profiles").select("role, companies(status)").eq("id", user.id).maybeSingle(),
+    sb.from("profiles").select("*, companies(status)").eq("id", user.id).maybeSingle(),
     sb.from("app_admins").select("user_id").eq("user_id", user.id).maybeSingle(),
   ]);
   const approved = (prof?.companies as { status?: string } | null)?.status === "approved";
-  const allowed = !!adm || (approved && (prof?.role === "engineer" || prof?.role === "company_admin"));
+  const active = prof?.active !== false; // deactivated accounts (supabase/deactivate-users.sql) are refused
+  const allowed = active && (!!adm || (approved && (prof?.role === "engineer" || prof?.role === "company_admin")));
   if (!allowed) return reply(403, "Only Packaging engineers and Admins can see the box inventory.");
 
   // POST adds a box to the sheet through its Apps Script web app (google/add-box.gs).
