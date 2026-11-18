@@ -107,6 +107,7 @@ button:disabled{opacity:.5;cursor:default}
 #pdfMsg,#cmpPdfMsg,#rwPdfMsg{width:100%;text-align:right}
 .iso{margin:0;padding:8px;background:var(--bg);border-radius:4px;display:flex;justify-content:center}
 .iso svg{max-height:240px;width:100%}
+.wallfig svg{max-height:200px}
 .rw-iso{margin:0;padding:8px;background:var(--bg);border-radius:4px;display:flex;justify-content:center}
 .rw-iso svg{max-height:380px;width:100%}
 .rw-mini svg{max-height:180px}
@@ -256,16 +257,31 @@ th.opt{text-align:right}
         <div id="libHelp" class="lib-row" hidden><span class="hint">Need a saved item changed or removed?</span><button id="contactAdmin" type="button">Contact admin</button></div>
       </div>
       <div id="pkgList" class="col"></div>
+      <p class="hint">Leave <b>Quantity to ship</b> blank to have the app fill the truck or container with that item.</p>
+      <div id="fillBox" class="col" style="gap:6px" hidden>
+        <label for="fillSplit">Split the fill between blank items
+          <select id="fillSplit"><option value="even">Same quantity of each item</option><option value="space">Same share of the space for each item</option></select></label>
+        <p class="hint">Items with a quantity load first. Blank items then fill the space left, up to the trucks or containers those items need (one if every quantity is blank).</p>
+      </div>
     </section>
 
     <section class="panel" aria-labelledby="palH">
       <div class="panel-head"><div><div class="step">Step 2</div><h2 id="palH">Pallets</h2></div>
         <button id="addPallet" type="button">+ Custom pallet</button></div>
+      <div class="tabs" id="loadTabs" role="group" aria-label="How the shipment is loaded">
+        <button type="button" data-m="pallet" aria-pressed="true">On pallets</button><button type="button" data-m="floor" aria-pressed="false">Floor loaded (no pallets)</button></div>
+      <div id="floorOpts" class="col" style="gap:8px" hidden>
+        <p class="hint">Cartons go straight on the trailer or container floor, stacked in columns up to the ceiling and built in walls from the nose to the doors. Each item gets its own walls, heaviest items toward the nose. This is common for sea containers.</p>
+        <label for="floorGap"><span>Space to leave above the cartons (<span class="u-len">in</span>)</span>
+          <input id="floorGap" type="number" min="0" step="0.5" value="0"></label>
+        <label class="check" for="allowTipF"><input id="allowTipF" type="checkbox"> Cartons may be placed on their side</label>
+      </div>
+      <div id="palOpts" class="col" style="gap:12px">
       <div id="palList" class="col"></div>
       <div class="row r2">
-        <label for="stackH">Max stack height (<span class="u-len">in</span>)
+        <label for="stackH"><span>Max stack height (<span class="u-len">in</span>)</span>
           <input id="stackH" type="number" min="1" step="0.5" value="52"></label>
-        <label for="overhang">Allowed overhang per side (<span class="u-len">in</span>)
+        <label for="overhang"><span>Allowed overhang per side (<span class="u-len">in</span>)</span>
           <input id="overhang" type="number" min="0" step="0.25" value="0"></label>
       </div>
       <label class="check" for="stackInclPallet"><input id="stackInclPallet" type="checkbox"> Stack height includes the pallet itself</label>
@@ -275,6 +291,7 @@ th.opt{text-align:right}
       <p class="hint" style="margin-top:-4px">Off: each item gets its own full pallets and only leftovers are mixed. On: every pallet is built from layers of several items, which can also cut the pallet count. Even quantities puts the same count of each item on every pallet (within one), using the fewest pallets that hold that mix.</p>
       <label for="mixPallet">Pallet for mixed (leftover) loads
         <select id="mixPallet"></select></label>
+      </div>
     </section>
 
     <section class="panel" aria-labelledby="trkH">
@@ -297,12 +314,12 @@ th.opt{text-align:right}
           <option value="custom">Custom</option>
         </select></label>
       <div class="row r4">
-        <label for="tL">Length (<span class="u-len">in</span>)<input id="tL" type="number" step="0.5"></label>
-        <label for="tW">Width (<span class="u-len">in</span>)<input id="tW" type="number" step="0.5"></label>
-        <label for="tH">Height (<span class="u-len">in</span>)<input id="tH" type="number" step="0.5"></label>
-        <label for="tMax">Max <span class="u-wt">lb</span><input id="tMax" type="number" step="100"></label>
+        <label for="tL"><span>Length (<span class="u-len">in</span>)</span><input id="tL" type="number" step="0.5"></label>
+        <label for="tW"><span>Width (<span class="u-len">in</span>)</span><input id="tW" type="number" step="0.5"></label>
+        <label for="tH"><span>Height (<span class="u-len">in</span>)</span><input id="tH" type="number" step="0.5"></label>
+        <label for="tMax"><span>Max <span class="u-wt">lb</span></span><input id="tMax" type="number" step="100"></label>
       </div>
-      <label class="check" for="dbl"><input id="dbl" type="checkbox"> Allow double-stacking pallets</label>
+      <label class="check" for="dbl" id="dblRow"><input id="dbl" type="checkbox"> Allow double-stacking pallets</label>
       <p class="hint">Interior dimensions. <span id="trkUnitHint">A 53 ft van is about 630 × 98.5 × 108 in with a 45,000 lb payload.</span> Container weights are the box's rated payload, and road weight limits are often lower. Check your carrier's numbers.</p>
     </section>
   </div>
@@ -603,6 +620,7 @@ const EXAMPLE={
     {name:"Case C",L:12,W:10,H:8,wt:12,qty:500,pallet:"auto"}],
   pallets:[{id:"p0",name:"GMA 48 × 40",L:48,W:40,H:5.5,tare:45,max:2500,fixed:true}],
   stackH:52,overhang:0,stackInclPallet:true,allowTip:false,mixPallet:"p0",comingle:false,evenQty:false,
+  loadMode:"pallet",floorGap:0,fillSplit:"even",
   truck:"53",tL:630,tW:98.5,tH:108,tMax:45000,dbl:false
 };
 let state=JSON.parse(JSON.stringify(EXAMPLE));
@@ -664,7 +682,14 @@ function layerPattern(PL,PW,l,w){
 function usableHeight(p,o=state){return o.stackInclPallet?Math.max(0,o.stackH-p.H):o.stackH}
 
 /* Best Ti:Hi for one item on one pallet, respecting weight limit */
-function tiHi(pkg,p,o=state){
+const TIHI_CACHE=new Map();
+function tiHi(pkg,p,o=state){ // cached: the fill-to-capacity search re-plans the same items many times
+  const key=[pkg.L,pkg.W,pkg.H,pkg.wt,p.L,p.W,p.H,p.max,o.overhang,o.stackH,o.stackInclPallet,o.allowTip].join("|");
+  let c=TIHI_CACHE.get(key);
+  if(c===undefined){if(TIHI_CACHE.size>400)TIHI_CACHE.clear();c=tiHiCalc(pkg,p,o);TIHI_CACHE.set(key,c)}
+  return c?{...c,pallet:p,offset:o.overhang}:null;
+}
+function tiHiCalc(pkg,p,o){
   const oh=o.overhang*2, L=p.L+oh, W=p.W+oh, avail=usableHeight(p,o);
   const dims=[pkg.L,pkg.W,pkg.H];
   const orients=o.allowTip?[[0,1,2],[0,2,1],[1,2,0]]:[[0,1,2]];
@@ -685,10 +710,10 @@ function tiHi(pkg,p,o=state){
 }
 
 /* ---------- BUILD PALLETS ---------- */
-function plan(){
+function plan(pkgs=state.packages){
   const pallets=state.pallets.filter(p=>p.L>0&&p.W>0);
   const mixP=pallets.find(p=>p.id===state.mixPallet)||pallets[0];
-  const skus=state.packages.map((pkg,i)=>({...pkg,idx:i,letter:LETTERS[i]}));
+  const skus=pkgs.map((pkg,i)=>({...pkg,idx:i,letter:LETTERS[i]}));
   const out={skus:[],built:[],warnings:[]};
   if(!pallets.length){out.warnings.push("Add at least one pallet with a length and width.");return out}
   const remLayers=[], evenSkus=[];
@@ -703,7 +728,7 @@ function plan(){
     out.skus.push(rec);
     if(!best||best.cases<1){out.warnings.push(`${esc(s.name)} doesn't fit on any pallet with the current stack height or weight limit.`);continue}
     if(best.hi<1) out.warnings.push(`${esc(s.name)}: a full layer would exceed the pallet's weight limit, so pallets get a partial layer.`);
-    const qty=Math.max(0,Math.floor(s.qty));
+    const qty=Math.max(0,Math.floor(num(s.qty)));
     if(state.comingle){const mr=(best.pallet===mixP)?best:tiHi(s,mixP);
       if(mr&&mr.ti>=1&&mr.cases>=1){rec.mixAll=true;if(qty>0){if(state.evenQty)evenSkus.push({s,qty,mr});else remLayers.push(...splitLayers(s,qty,mr))}continue}
       out.warnings.push(`${esc(s.name)} doesn't fit the mixed-load pallet, so it was not commingled.`);}
@@ -822,6 +847,109 @@ function loadTruck(built){
   return {T,trucks,warnings};
 }
 
+
+/* ---------- FLOOR LOAD (cartons on the floor, no pallets) ----------
+   Each item is built in walls across the container, nose to doors. A wall is one row of columns
+   stacked to the ceiling; columns stand with the long or short side across, and a wall can mix both
+   (turned columns fill leftover width, stacked two or more deep inside the wall). Each item gets its
+   own walls, heaviest item first so the weight sits toward the nose. */
+function floorFit(s,T,o=state){
+  const Hc=T.H-(o.floorGap||0), dims=[s.L,s.W,s.H];
+  const ors=o.allowTip?[[0,1,2],[0,2,1],[1,2,0]]:[[0,1,2]];
+  let best=null;
+  for(const or of ors){const l=dims[or[0]],w=dims[or[1]],h=dims[or[2]];
+    if(!(l>0&&w>0&&h>0))continue;
+    const hi=Math.floor(Hc/h+1e-9); if(hi<1)continue;
+    for(const [d,a] of [[l,w],[w,l]]){
+      if(d>T.L+1e-9)continue;
+      const k=Math.floor(d/a+1e-9);
+      for(let n1=Math.floor(T.W/a+1e-9);n1>=0;n1--){
+        const n2=k>0?Math.floor((T.W-n1*a)/d+1e-9):0, cols=n1+n2*k; if(!cols)continue;
+        const score=cols*hi/d;
+        if(!best||score>best.score+1e-9) best={l,w,h,d,a,hi,n1,n2,k,cols,per:cols*hi,used:n1*a+n2*d,score};
+      }}}
+  if(best){const y0=(T.W-best.used)/2,r=[];
+    for(let i=0;i<best.n1;i++)r.push({x:0,y:y0+i*best.a,dx:best.d,dy:best.a});
+    for(let i=0;i<best.n2;i++)for(let j=0;j<best.k;j++)r.push({x:j*best.a,y:y0+best.n1*best.a+i*best.d,dx:best.a,dy:best.d});
+    best.r=r}
+  return best;
+}
+function floorPlan(pkgs=state.packages){
+  const T={L:state.tL,W:state.tW,H:state.tH,max:state.tMax};
+  const out={T,skus:[],cons:[],warnings:[]};
+  out.skus=pkgs.map((p,i)=>{const s={...p,idx:i,letter:LETTERS[i]};
+    return {sku:s,fit:floorFit(s,T),qty:Math.max(0,Math.floor(num(s.qty))),loaded:0,walls:0}});
+  out.skus.forEach(r=>{if(!r.fit&&r.qty>0)out.warnings.push(`${esc(r.sku.name)} doesn't fit in the ${state.floorGap>0?"space under the top clearance":"trailer or container"}${state.allowTip?"":", even upright. Try letting cartons lie on their side"}.`)});
+  let cur;const newC=()=>{cur={walls:[],used:0,wt:0,cartons:0,cube:0,byWt:false};out.cons.push(cur)};newC();
+  const order=out.skus.filter(r=>r.fit&&r.qty>0).sort((a,b)=>((b.sku.wt||0)-(a.sku.wt||0))||(a.sku.idx-b.sku.idx));
+  for(const r of order){
+    const s=r.sku,f=r.fit,wt=Math.max(0,s.wt||0);let left=r.qty;
+    if(T.max>0&&wt>T.max){out.warnings.push(`One ${esc(s.name)} is heavier than the payload limit.`);continue}
+    while(left>0){
+      if(cur.used+f.d>T.L+1e-9)newC();
+      const wall={x:cur.used,d:f.d,rec:r,cols:[]};let byWt=false;
+      for(const c of f.r){if(left<=0)break;
+        let n=Math.min(f.hi,left);
+        if(T.max>0&&wt>0){const m=Math.floor((T.max-cur.wt)/wt+1e-9);if(m<n){n=m;byWt=true}}
+        if(n<=0)break;
+        wall.cols.push({x:c.x+cur.used,y:c.y,dx:c.dx,dy:c.dy,n});cur.wt+=n*wt;cur.cartons+=n;cur.cube+=n*f.l*f.w*f.h;left-=n;r.loaded+=n}
+      if(wall.cols.length){cur.walls.push(wall);cur.used+=f.d;r.walls++}
+      if(byWt&&left>0){cur.byWt=true;newC()}
+    }
+  }
+  out.cons=out.cons.filter(c=>c.cartons>0);
+  out.cons.forEach(c=>{let front=0;c.walls.forEach(w=>w.cols.forEach(q=>{if(q.x+q.dx/2<T.L/2)front+=q.n*(w.rec.sku.wt||0)}));c.front=front;c.rear=c.wt-front;
+    c.secs=[];c.walls.forEach(w=>{const p=c.secs[c.secs.length-1];if(p&&p.rec===w.rec){p.walls.push(w);p.x1=w.x+w.d;p.cartons+=w.cols.reduce((a,q)=>a+q.n,0)}
+      else c.secs.push({rec:w.rec,walls:[w],x0:w.x,x1:w.x+w.d,cartons:w.cols.reduce((a,q)=>a+q.n,0)})});
+    c.secs.forEach(sc=>sc.wt=sc.cartons*(sc.rec.sku.wt||0))});
+  return out;
+}
+
+/* ---------- FILL TO CAPACITY ----------
+   Items with Quantity to ship left blank fill the space the other items leave, in as many trucks or
+   containers as those items need (one if every quantity is blank). "even" gives each blank item the
+   same quantity; "space" gives each the same share of the cube (smaller items get more). */
+const isFill=p=>p.qty===null||p.qty===undefined||p.qty==="";
+const isCont=()=>/^c/.test(state.truck);
+const loadNoun=n=>(isCont()?"container":"truck")+(n===1?"":"s");
+function loadCheck(pkgs){
+  if(state.loadMode==="floor"){const F=floorPlan(pkgs);return {n:F.cons.length,ok:F.skus.every(r=>r.loaded>=r.qty)}}
+  const R=plan(pkgs),TL=loadTruck(R.built);
+  return {n:TL.trucks.filter(t=>t.units.length).length,
+    ok:TL.trucks.reduce((a,t)=>a+t.pallets,0)===R.built.length&&R.skus.every(r=>r.res&&r.res.cases>0||!(num(r.sku.qty)>0))};
+}
+function resolveQtys(){
+  const blank=state.packages.map((p,i)=>isFill(p)?i:-1).filter(i=>i>=0);
+  const base=state.packages.map(p=>({...p,qty:isFill(p)?0:Math.max(0,Math.floor(num(p.qty)))}));
+  if(!blank.length)return {pkgs:base,fill:null};
+  const b0=loadCheck(base),N=Math.max(1,b0.n),split=state.fillSplit==="space"?"space":"even";
+  const vol=i=>base[i].L*base[i].W*base[i].H;
+  const fits=q=>{const c=loadCheck(base.map((p,j)=>q[j]===undefined?p:{...p,qty:q[j]}));return c.n<=N&&(c.ok||!b0.ok)};
+  const use=blank.filter(i=>vol(i)>0&&fits({[i]:1}));
+  const vmax=Math.max(1e-9,...use.map(vol)), w=i=>split==="space"?vmax/vol(i):1;
+  const at=k=>{const q={};use.forEach(i=>q[i]=Math.floor(k*w(i)+1e-9));return q};
+  let lo=0,hi=1,guard=0;
+  if(use.length){while(fits(at(hi))&&hi<1e7&&guard++<40){lo=hi;hi*=2}
+    while(hi-lo>1){const m=Math.floor((lo+hi)/2);if(fits(at(m)))lo=m;else hi=m}}
+  const q=at(lo);
+  // top up whatever space is left, one at a time: one pass for "even" keeps counts within one of each other
+  let budget=250,more=use.length>0;
+  while(more&&budget>0){more=false;
+    for(const i of use){if(budget--<=0)break;const t={...q,[i]:q[i]+1};if(fits(t)){q[i]++;more=true}}
+    if(split==="even")break}
+  const pkgs=base.map((p,j)=>q[j]===undefined?p:{...p,qty:q[j]});
+  return {pkgs,fill:{blank,use,N,split,q,none:blank.filter(i=>!use.includes(i))}};
+}
+function fillText(Q,mode,x="×"){
+  const f=Q.fill;if(!f)return "";
+  const names=f.use.map(i=>`${state.packages[i].name} ${x} ${fmt(f.q[i])}`).join(", ");
+  const how=f.split==="space"?"same share of the space for each item":"same quantity of each item";
+  let t=f.use.length?`Filled to capacity: blank quantities are set to the most that fits in ${f.N===1?"one":fmt(f.N)} ${loadNoun(f.N)}${mode==="floor"?" floor loaded":""}. ${names}${f.use.length>1?` (${how})`:""}.`:"";
+  if(f.none.length)t+=` ${f.none.map(i=>state.packages[i].name).join(", ")}: no room left, so none were added.`;
+  return t.trim();
+}
+function fillNote(Q,mode){return Q.fill?`<div class="msg ok">${esc(fillText(Q,mode))}</div>`:""}
+
 /* ---------- RENDER: inputs ---------- */
 function palletOptions(sel,withAuto){
   return (withAuto?`<option value="auto"${sel==="auto"?" selected":""}>Auto (best fit)</option>`:"")+
@@ -840,8 +968,8 @@ function renderPkgs(){
        <label for="pk-wt-${i}">Wt ${uW()}<input id="pk-wt-${i}" data-f="wt" type="number" min="0" step="any" value="${vW(p.wt)}"></label>
      </div>
      <div class="row r2">
-       <label for="pk-qty-${i}">Quantity to ship<input id="pk-qty-${i}" data-f="qty" type="number" min="0" step="1" value="${p.qty}"></label>
-       <label for="pk-pal-${i}">Pallet<select id="pk-pal-${i}" data-f="pallet">${palletOptions(p.pallet,true)}</select></label>
+       <label for="pk-qty-${i}">Quantity to ship<input id="pk-qty-${i}" data-f="qty" type="number" min="0" step="1" placeholder="Blank = fill" value="${isFill(p)?"":p.qty}"></label>
+       <label for="pk-pal-${i}"${state.loadMode==="floor"?" hidden":""}>Pallet<select id="pk-pal-${i}" data-f="pallet">${palletOptions(p.pallet,true)}</select></label>
      </div>
    </div>`).join("");
 }
@@ -864,6 +992,10 @@ function renderPallets(){
 function syncGlobals(){
   $("pkgCount").value=state.packages.length;$("stackH").value=vL(state.stackH);$("overhang").value=vL(state.overhang);
   $("stackInclPallet").checked=state.stackInclPallet;$("allowTip").checked=state.allowTip;$("comingle").checked=!!state.comingle;$("evenQty").checked=!!state.evenQty;$("evenQty").disabled=!state.comingle;
+  $("allowTipF").checked=state.allowTip;$("floorGap").value=vL(state.floorGap||0);$("fillSplit").value=state.fillSplit||"even";
+  const fl=state.loadMode==="floor";
+  document.querySelectorAll("#loadTabs button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.m===state.loadMode));
+  $("floorOpts").hidden=!fl;$("palOpts").hidden=fl;$("addPallet").hidden=fl;$("dblRow").hidden=fl;$("palH").textContent=fl?"Floor load":"Pallets";
   $("truckPreset").value=state.truck;$("tL").value=vL(state.tL);$("tW").value=vL(state.tW);$("tH").value=vL(state.tH);$("tMax").value=vW(state.tMax);$("dbl").checked=state.dbl;
 }
 
@@ -957,7 +1089,9 @@ function groupBuilt(built){const rows=[];
     if(sig&&prev&&prev.sig===sig){prev.list.push(b)}else rows.push({sig,list:[b]})}
   return rows}
 function renderResults(){
-  const R=plan(); const TL=loadTruck(R.built); LAST={R,TL};
+  const Q=resolveQtys();$("fillBox").hidden=!Q.fill;
+  if(state.loadMode==="floor"){renderFloor(Q);return}
+  const R=plan(Q.pkgs); const TL=loadTruck(R.built); LAST={R,TL,Q,mode:"pallet"};
   const totalCases=R.built.reduce((a,b)=>a+b.cases,0), totalWt=R.built.reduce((a,b)=>a+b.weight,0);
   const positions=TL.trucks.reduce((a,t)=>a+t.positions,0);
   const lastT=TL.trucks[TL.trucks.length-1];
@@ -965,6 +1099,7 @@ function renderResults(){
   const maxH=Math.max(state.stackInclPallet?state.stackH:state.stackH+Math.max(...state.pallets.map(p=>p.H||0)),...R.built.map(b=>b.height),1);
   const warn=[...R.warnings,...TL.warnings];
   let h="";
+  h+=fillNote(Q,"pallet");
   if(warn.length) h+=warn.map(w=>`<div class="alert">${w}</div>`).join("");
   h+=`<div class="tiles">
     <div class="tile hl"><span class="k">Pallets</span><span class="v">${R.built.length}</span><span class="s">${R.built.filter(b=>b.type==="full").length} full · ${R.built.filter(b=>b.type!=="full").length} mixed/partial</span></div>
@@ -991,7 +1126,7 @@ function renderResults(){
         <dt>Pallet height</dt><dd>${fL(res.pallet.H+res.hi*res.h)}</dd>
         <dt>Pallet weight</dt><dd>${fW(res.cases*s.wt+res.pallet.tare)}</dd>
         <dt>Limited by</dt><dd>${res.limitedBy==="weight"?'<span class="pill warn">weight</span>':"height"}</dd>
-        <dt>${fmt(s.qty)} to ship</dt><dd>${r.mixAll?"commingled on mixed pallets":`${r.full} full + ${fmt(r.rem)} left over`}</dd>
+        <dt>${fmt(s.qty)} to ship${Q.fill&&Q.fill.blank.includes(s.idx)?" (fill)":""}</dt><dd>${r.mixAll?"commingled on mixed pallets":`${r.full} full + ${fmt(r.rem)} left over`}</dd>
       </dl></div>`;
   }
   h+=`</div></section>`;
@@ -1059,6 +1194,106 @@ function renderResults(){
   }
   h+=`</tbody></table></div>`;
   h+=`<p class="hint">Mixed pallets put the heaviest items on the bottom: full layers go heaviest item first, then partial layers on top, also heaviest first. Partial layers are shown at their share of the pallet length.</p></section>`;
+  $("results").innerHTML=h;
+}
+
+
+/* ---------- RENDER: floor load ---------- */
+function wallSVG(f,T,ci){ // one wall seen from the doors, with its footprint from above underneath
+  const pad=3,y0=(T.W-f.used)/2,gap=8,fy=pad+T.H+gap;
+  const cols=[];for(let i=0;i<f.n1;i++)cols.push({y:y0+i*f.a,w:f.a});for(let i=0;i<f.n2;i++)cols.push({y:y0+f.n1*f.a+i*f.d,w:f.d});
+  let s=`<rect x="${pad}" y="${pad}" width="${T.W}" height="${T.H}" fill="var(--truck-floor)" stroke="var(--truck)" stroke-width="2"/>`;
+  cols.forEach(c=>{for(let j=0;j<f.hi;j++)s+=`<rect x="${pad+c.y}" y="${pad+T.H-(j+1)*f.h}" width="${c.w}" height="${f.h}" fill="${color(ci)}" stroke="var(--panel)" stroke-width=".8"/>`});
+  if(state.floorGap>0){const ly=pad+state.floorGap;s+=`<line x1="${pad}" x2="${pad+T.W}" y1="${ly}" y2="${ly}" stroke="var(--warn)" stroke-dasharray="3 2" stroke-width=".8"/>`}
+  s+=`<rect x="${pad}" y="${fy}" width="${T.W}" height="${f.d}" fill="var(--truck-floor)" stroke="var(--truck)" stroke-width="1.5"/>`;
+  f.r.forEach(c=>{s+=`<rect x="${pad+c.y}" y="${fy+c.x}" width="${c.dy}" height="${c.dx}" fill="${color(ci)}" stroke="var(--panel)" stroke-width=".8"/>`});
+  return `<svg viewBox="0 0 ${T.W+pad*2} ${fy+f.d+pad}" role="img" aria-label="One wall seen from the doors, ${f.cols} columns ${f.hi} high, and its footprint from above">${s}</svg>`;
+}
+function floorTopSVG(T,c,ci){
+  const pad=14,top=22,vbW=T.L+pad*2+28,vbH=T.W+top+pad+20;
+  let s=`<text x="${pad}" y="14" font-size="11" fill="var(--muted)" font-family="var(--f-mono)">NOSE ◀</text>
+   <text x="${T.L+pad}" y="14" font-size="11" fill="var(--muted)" font-family="var(--f-mono)" text-anchor="end">▶ DOORS</text>
+   <rect x="${pad}" y="${top}" width="${T.L}" height="${T.W}" fill="var(--panel)" stroke="var(--truck)" stroke-width="3"/>
+   <line x1="${pad+T.L/2}" x2="${pad+T.L/2}" y1="${top}" y2="${top+T.W}" stroke="var(--truck)" stroke-dasharray="4 4"/>`;
+  c.walls.forEach(w=>{const hi=w.rec.fit.hi;w.cols.forEach(q=>{
+    s+=`<rect x="${pad+q.x}" y="${top+q.y}" width="${q.dx}" height="${q.dy}" fill="${color(w.rec.sku.idx)}" opacity="${q.n<hi?.45:.85}" stroke="var(--panel)" stroke-width=".6"/>`})});
+  c.secs.forEach(sc=>{const w=sc.x1-sc.x0,label=`${sc.rec.sku.name} × ${fmt(sc.cartons)}`,x=pad+sc.x0+w/2,y=top+T.W/2;
+    const fs=Math.max(4,Math.min(11,w/(label.length*0.62)));
+    s+=`<text x="${x}" y="${y+fs*0.35}" font-size="${fs}" text-anchor="middle" fill="#fff" font-family="var(--f-mono)" font-weight="600" paint-order="stroke" stroke="rgba(0,0,0,.6)" stroke-width="${fs/4}">${esc(label)}</text>`});
+  const sy=top+T.W+14;s+=`<line x1="${pad}" x2="${pad+T.L}" y1="${sy}" y2="${sy}" stroke="var(--muted)"/>`;
+  const met=MET(),step=met?1000/MM:12*5;
+  for(let k=0;k*step<=T.L+1e-6;k++){const x=pad+k*step;s+=`<line x1="${x}" x2="${x}" y1="${sy-3}" y2="${sy+3}" stroke="var(--muted)"/>`;
+    if(k%2===0)s+=`<text x="${x}" y="${sy+14}" font-size="9" text-anchor="middle" fill="var(--muted)" font-family="var(--f-mono)">${met?k+" m":k*5+" ft"}</text>`}
+  return `<svg viewBox="0 0 ${vbW} ${vbH+6}" role="img" aria-label="${isCont()?"Container":"Truck"} ${ci+1} floor plan">${s}</svg>`;
+}
+function floorIsoSVG(T,c,ci){ // cutaway 3D view: near side wall and roof removed, nose on the left
+  const cx=0.42,cy=0.26,P=(x,y,z)=>[x+y*cx,-z-y*cy];
+  const poly=(pts,fill,extra="")=>`<polygon points="${pts.map(p=>P(...p).map(v=>v.toFixed(1)).join(",")).join(" ")}" fill="${fill}" ${extra}/>`;
+  const line=(a,b,st)=>{const p=P(...a),q=P(...b);return `<line x1="${p[0].toFixed(1)}" y1="${p[1].toFixed(1)}" x2="${q[0].toFixed(1)}" y2="${q[1].toFixed(1)}" ${st}/>`};
+  const L=T.L,W=T.W,H=T.H,wall='stroke="var(--truck)" stroke-width="1.2"';
+  let s=poly([[0,0,0],[L,0,0],[L,W,0],[0,W,0]],"var(--truck-floor)",wall)+poly([[0,W,0],[L,W,0],[L,W,H],[0,W,H]],"var(--soft)",wall)+poly([[0,0,0],[0,W,0],[0,W,H],[0,0,H]],"var(--soft)",wall);
+  const boxes=[];c.walls.forEach(w=>{const f=w.rec.fit;w.cols.forEach(q=>boxes.push({...q,h:f.h,ci:w.rec.sku.idx}))});
+  const yFront=Math.min(...boxes.map(b=>b.y));
+  boxes.sort((a,b)=>(b.y-a.y)||(a.x-b.x));
+  const st='stroke="rgba(0,0,0,.45)" stroke-width=".5" stroke-linejoin="round"';
+  boxes.forEach(b=>{const X=b.x+b.dx,Y=b.y+b.dy,Z=b.n*b.h,fill=color(b.ci);
+    s+=poly([[b.x,b.y,Z],[X,b.y,Z],[X,Y,Z],[b.x,Y,Z]],fill,st);
+    s+=poly([[X,b.y,0],[X,Y,0],[X,Y,Z],[X,b.y,Z]],fill,st)+poly([[X,b.y,0],[X,Y,0],[X,Y,Z],[X,b.y,Z]],"#000",'opacity=".28"');
+    s+=poly([[b.x,b.y,0],[X,b.y,0],[X,b.y,Z],[b.x,b.y,Z]],fill,st)+poly([[b.x,b.y,0],[X,b.y,0],[X,b.y,Z],[b.x,b.y,Z]],"#000",'opacity=".12"');
+    if(b.y<=yFront+1e-6)for(let j=1;j<b.n;j++)s+=line([b.x,b.y,j*b.h],[X,b.y,j*b.h],'stroke="rgba(0,0,0,.35)" stroke-width=".4"')});
+  s+=line([0,0,0],[L,0,0],wall)+line([L,0,0],[L,W,0],wall)+line([L,W,0],[L,W,H],wall)+line([0,0,H],[0,W,H],wall)+line([0,W,H],[L,W,H],wall)+line([L,W,H],[L,0,H],'stroke="var(--truck)" stroke-dasharray="4 3"')+line([L,0,H],[L,0,0],'stroke="var(--truck)" stroke-dasharray="4 3"');
+  const x0=0,x1=L+W*cx,y0=-H-W*cy-16,y1=10;
+  s+=`<text x="0" y="${(-H-W*cy-4).toFixed(1)}" font-size="11" fill="var(--muted)" font-family="var(--f-mono)">NOSE</text><text x="${L.toFixed(1)}" y="${(-H-W*cy-4).toFixed(1)}" font-size="11" fill="var(--muted)" font-family="var(--f-mono)" text-anchor="end">DOORS</text>`;
+  return `<svg viewBox="${x0-4} ${y0} ${x1-x0+8} ${y1-y0}" role="img" aria-label="${isCont()?"Container":"Truck"} ${ci+1}, 3D view of the cartons">${s}</svg>`;
+}
+function renderFloor(Q){
+  const F=floorPlan(Q.pkgs),T=F.T,cons=F.cons;LAST={F,Q,mode:"floor"};
+  const tot=cons.reduce((a,c)=>a+c.cartons,0),wt=cons.reduce((a,c)=>a+c.wt,0),cube=cons.reduce((a,c)=>a+c.cube,0);
+  const cap=T.L*T.W*T.H*Math.max(1,cons.length),Noun=isCont()?"Container":"Truck";
+  let h=fillNote(Q,"floor");
+  if(F.warnings.length)h+=F.warnings.map(w=>`<div class="alert">${w}</div>`).join("");
+  h+=`<div class="tiles">
+    <div class="tile hl"><span class="k">${Noun}s</span><span class="v">${cons.length}</span><span class="s">floor loaded, no pallets</span></div>
+    <div class="tile hl"><span class="k">Cartons</span><span class="v">${fmt(tot)}</span><span class="s">${state.packages.length} sizes</span></div>
+    <div class="tile"><span class="k">Gross weight</span><span class="v">${fmt(toW(wt))}</span><span class="s">${uW()}, cartons only</span></div>
+    <div class="tile"><span class="k">Space used</span><span class="v">${fmt(cube/cap*100,0)}%</span><span class="s">of ${fCube(cap)}</span></div>
+  </div>`;
+  h+=`<section class="panel"><div class="panel-head"><h2>Floor load by item</h2><span class="hint">Columns across × cartons high = one wall</span></div><div class="cards">`;
+  for(const r of F.skus){const s=r.sku,f=r.fit,fill=Q.fill&&Q.fill.blank.includes(s.idx);
+    if(!f){h+=`<div class="card"><div class="item-head"><span class="swatch" style="background:${color(s.idx)}"></span><h3>${esc(s.name)}</h3></div><p class="hint">Doesn't fit. Check the dimensions and the trailer or container height.</p></div>`;continue}
+    const full=Math.floor(r.loaded/f.per),part=r.loaded-full*f.per;
+    h+=`<div class="card">
+      <div class="item-head"><span class="swatch" style="background:${color(s.idx)}"></span><h3>${esc(s.name)}</h3><span class="pill" style="margin-left:auto">${r.walls} wall${r.walls===1?"":"s"}</span></div>
+      <div class="tihi">${f.cols}×${f.hi}<small>= ${fmt(f.per)} PER WALL</small></div>
+      <figure class="iso wallfig">${wallSVG(f,T,s.idx)}</figure>
+      <p class="hint" style="text-align:center">One wall seen from the doors, and its footprint from above</p>
+      <dl class="kv">
+        <dt>Placed as</dt><dd>${fmtL(f.l,1)}×${fmtL(f.w,1)} footprint, ${fL(f.h)} up</dd>
+        <dt>Wall depth</dt><dd>${fL(f.d)}</dd>
+        <dt>Columns across</dt><dd>${f.cols}${f.n2?` (${f.n1} + ${f.n2*f.k} turned)`:""}</dd>
+        <dt>Cartons high</dt><dd>${f.hi}</dd>
+        <dt>${fmt(r.qty)} to ship${fill?" (fill)":""}</dt><dd>${full} full wall${full===1?"":"s"}${part?` + ${fmt(part)}`:""}</dd>
+        <dt>Weight</dt><dd>${fW(r.loaded*(s.wt||0))}</dd>
+      </dl></div>`}
+  h+=`</div></section>`;
+  h+=`<section class="panel"><div class="panel-head"><h2>${Noun} load plan</h2><span class="hint">${fLong(T.L)} × ${fL(T.W)} × ${fL(T.H)} · floor loaded</span></div>`;
+  cons.forEach((c,i)=>{const fp=c.wt?c.front/c.wt*100:0,pct=T.max>0?c.wt/T.max*100:0;
+    h+=`<div class="col">
+      <div class="panel-head"><h3>${Noun} ${i+1}</h3>
+        <span class="mono hint">${fmt(c.cartons)} cartons · ${fmt(toW(c.wt))} / ${fW(T.max)} · ${fLong(c.used).split(" ")[0]} of ${fLong(T.L)} used · ${fmt(c.cube/(T.L*T.W*T.H)*100,0)}% of cube</span></div>
+      <div class="truckwrap">${floorIsoSVG(T,c,i)}</div>
+      <div class="truckwrap">${floorTopSVG(T,c,i)}</div>
+      <div class="balance"><div class="bar"><i style="width:${Math.min(100,pct)}%;background:${c.byWt||pct>100?"var(--warn)":"var(--c3)"}"></i></div>
+      <span class="hint">Weight check: ${fW(c.wt)} of ${fW(T.max)} payload (${fmt(pct,0)}%)${c.byWt?". Full by weight, not space: the rest goes in the next "+Noun.toLowerCase():pct>=99.5?". At the limit":". Under the limit"}.</span></div>
+      <div class="balance"><div class="bar"><i style="width:${fp}%;background:var(--c2)"></i><i style="width:${100-fp}%;background:var(--c1)"></i></div>
+      <span class="hint">Front half ${fW(c.front)} (${fmt(fp,0)}%) · rear half ${fW(c.rear)} (${fmt(100-fp,0)}%).</span></div>
+    </div>`});
+  if(!cons.length)h+=`<p class="hint">Enter a quantity, or leave it blank to fill the ${loadNoun(1)}.</p>`;
+  h+=`<div class="legend">${state.packages.map((p,i)=>`<span><i class="swatch" style="background:${color(i)}"></i>${esc(p.name)}</span>`).join("")}<span class="hint">Faded column = not full height</span></div></section>`;
+  h+=`<section class="panel"><div class="panel-head"><h2>Load list</h2><span class="hint">Nose to doors</span></div>
+   <div class="tablewrap"><table><thead><tr><th>${Noun}</th><th>Item</th><th>From nose</th><th class="n">Walls</th><th class="n">Cartons</th><th class="n">Weight ${uW()}</th></tr></thead><tbody>`;
+  cons.forEach((c,i)=>c.secs.forEach(sc=>{h+=`<tr><td class="mono">${Noun[0]}${i+1}</td><td><span style="display:inline-flex;align-items:center;gap:4px"><i class="swatch" style="background:${color(sc.rec.sku.idx)}"></i>${esc(sc.rec.sku.name)}</span></td><td class="mono">${fLong(sc.x0)} – ${fLong(sc.x1)}</td><td class="n">${sc.walls.length}</td><td class="n">${fmt(sc.cartons)}</td><td class="n">${fmt(toW(sc.wt))}</td></tr>`}));
+  h+=`</tbody></table></div><p class="hint">Build each wall floor to ceiling across the full width before starting the next. The last wall of an item may be partial; finish it from one side.</p></section>`;
   $("results").innerHTML=h;
 }
 
@@ -1134,12 +1369,12 @@ async function buildPdf(){
   y+=62;
   doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...muted);
   const settings=`Max stack height ${fL(state.stackH)} ${state.stackInclPallet?"(includes pallet)":"(product only, pallet added)"}  \u00b7  Overhang ${fL(state.overhang,MET()?1:2)}/side  \u00b7  ${state.allowTip?"Items may lie on side":"Items kept upright"}${state.comingle?(state.evenQty?"  \u00b7  Items commingled, even quantities per pallet":"  \u00b7  Items commingled on pallets"):""}  \u00b7  Truck ${fLong(state.tL)} x ${fDims([state.tW,state.tH],1," x ")}, max ${fW(state.tMax)}  \u00b7  ${state.dbl?"Double-stacking allowed":"Single-stacked"}`;
-  const lines=doc.splitTextToSize(settings,CW);doc.text(lines,M,y);y+=lines.length*11+8;
+  const lines=doc.splitTextToSize(settings+(LAST.Q&&LAST.Q.fill?"  \u00b7  "+fillText(LAST.Q,"pallet","x"):""),CW);doc.text(lines,M,y);y+=lines.length*11+8;
   heading("Items and Ti:Hi");
   doc.autoTable({startY:y,margin:{left:M,right:M},theme:"grid",styles:{fontSize:8.5,cellPadding:4,textColor:ink,lineColor:[211,216,222]},
     headStyles:{fillColor:[29,35,43],textColor:255,fontStyle:"bold"},
     head:[["Item",`L x W x H ${uL()}`,`Wt ${uW()}`,"Qty","Pallet","Ti","Hi","Per pallet","Full","Left over"]],
-    body:R.skus.map(r=>{const s=r.sku,x=r.res;return [s.name,[s.L,s.W,s.H].map(v=>fmtL(v,2)).join(" x "),fmt(toW(s.wt),1),fmt(s.qty),x?x.pallet.name:"-",x?x.ti:"-",x?x.hi:"-",x?x.cases:"-",r.mixAll?"-":r.full,r.mixAll?"mixed":fmt(r.rem)]}),
+    body:R.skus.map(r=>{const s=r.sku,x=r.res;return [s.name,[s.L,s.W,s.H].map(v=>fmtL(v,2)).join(" x "),fmt(toW(s.wt),1),fmt(s.qty)+(LAST.Q&&LAST.Q.fill&&LAST.Q.fill.blank.includes(s.idx)?" (fill)":""),x?x.pallet.name:"-",x?x.ti:"-",x?x.hi:"-",x?x.cases:"-",r.mixAll?"-":r.full,r.mixAll?"mixed":fmt(r.rem)]}),
     columnStyles:{2:{halign:"right"},3:{halign:"right"},5:{halign:"right"},6:{halign:"right"},7:{halign:"right"},8:{halign:"right"},9:{halign:"right"}}});
   y=doc.lastAutoTable.finalY+16;
   // Layer patterns, 3 per row
@@ -1203,7 +1438,71 @@ async function buildPdf(){
   pdfFooter(doc,`Ti:Hi Shipment Builder  \u00b7  ${date}`,PW,PH,M);
   return doc;
 }
-window.__tihi_pdf=async()=>(await buildPdf()).output("blob");
+
+async function buildFloorPdf(){
+  const {F,Q}=LAST,T=F.T,cons=F.cons,Noun=isCont()?"Container":"Truck";const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:"pt",format:"letter"}); const PW=612,PH=792,M=40,CW=PW-2*M;
+  let y=M;const ink=[29,35,43],muted=[91,102,114];
+  const need=h=>{if(y+h>PH-M){doc.addPage();y=M}};
+  const heading=(t,next=0)=>{need(40+next);y+=6;doc.setFont("helvetica","bold");doc.setFontSize(13);doc.setTextColor(...ink);doc.text(t.toUpperCase(),M,y+12);
+    doc.setDrawColor(242,183,5);doc.setLineWidth(2);doc.line(M,y+18,M+CW,y+18);y+=30};
+  const date=new Date().toLocaleString();
+  y=await pdfHeader(doc,"Ti:Hi Shipment Builder","Floor load report  ·  "+date,PW,M);
+  const tot=cons.reduce((a,c)=>a+c.cartons,0),wt=cons.reduce((a,c)=>a+c.wt,0),cube=cons.reduce((a,c)=>a+c.cube,0),cap=T.L*T.W*T.H*Math.max(1,cons.length);
+  const tiles=[[Noun+"s",cons.length],["Cartons",fmt(tot)],["Gross weight",fW(wt)],["Space used",fmt(cube/cap*100,0)+"%"]];
+  const tw=(CW-30)/4;
+  tiles.forEach(([k,v],i)=>{const x=M+i*(tw+10);doc.setDrawColor(211,216,222);doc.setLineWidth(.8);doc.rect(x,y,tw,46);
+    doc.setFillColor(242,183,5);doc.rect(x,y+43,tw,3,"F");
+    doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...muted);doc.text(k.toUpperCase(),x+8,y+13);
+    doc.setFont("helvetica","bold");doc.setFontSize(17);doc.setTextColor(...ink);doc.text(String(v),x+8,y+34)});
+  y+=62;
+  doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...muted);
+  const settings=`Floor loaded, no pallets  ·  ${Noun} ${fLong(T.L)} x ${fDims([T.W,T.H],1," x ")}, max ${fW(T.max)}  ·  ${state.allowTip?"Cartons may lie on side":"Cartons kept upright"}${state.floorGap>0?`  ·  ${fL(state.floorGap)} left above cartons`:""}${Q.fill?"  ·  "+fillText(Q,"floor","x"):""}`;
+  const lines=doc.splitTextToSize(settings,CW);doc.text(lines,M,y);y+=lines.length*11+8;
+  F.warnings.forEach(w=>{const l=doc.splitTextToSize(w.replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"'),CW);doc.setTextColor(180,64,31);doc.text(l,M,y);y+=l.length*11+4});
+  heading("Items and walls");
+  doc.autoTable({startY:y,margin:{left:M,right:M},theme:"grid",styles:{fontSize:8.5,cellPadding:4,textColor:ink,lineColor:[211,216,222]},
+    headStyles:{fillColor:[29,35,43],textColor:255,fontStyle:"bold"},
+    head:[["Item",`L x W x H ${uL()}`,`Wt ${uW()}`,"Qty","Placed as","Across x high","Per wall","Walls","Loaded"]],
+    body:F.skus.map(r=>{const s=r.sku,f=r.fit;return [s.name,[s.L,s.W,s.H].map(v=>fmtL(v,2)).join(" x "),fmt(toW(s.wt),1),fmt(r.qty)+(Q.fill&&Q.fill.blank.includes(s.idx)?" (fill)":""),
+      f?`${fmtL(f.l,1)}x${fmtL(f.w,1)}, ${fL(f.h)} up`:"doesn't fit",f?`${f.cols} x ${f.hi}`:"-",f?fmt(f.per):"-",r.walls,fmt(r.loaded)]}),
+    columnStyles:{2:{halign:"right"},3:{halign:"right"},6:{halign:"right"},7:{halign:"right"},8:{halign:"right"}}});
+  y=doc.lastAutoTable.finalY+16;
+  heading("One wall of each item (from the doors, footprint below)",200);
+  const lw=(CW-2*16)/3,withFit=F.skus.filter(r=>r.fit);
+  for(let i=0;i<withFit.length;i+=3){
+    const row=withFit.slice(i,i+3);const imgs=await Promise.all(row.map(r=>svgToPng(wallSVG(r.fit,T,r.sku.idx),600)));
+    const ih=Math.max(...imgs.map(m=>Math.min(lw*m.ratio,170)));need(ih+50);
+    row.forEach((r,j)=>{const x=M+j*(lw+16),c=hex(color(r.sku.idx)),m=imgs[j];let iw=lw,h2=lw*m.ratio;if(h2>170){h2=170;iw=h2/m.ratio}
+      doc.setFillColor(...c);doc.rect(x,y,8,8,"F");doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(...ink);doc.text(r.sku.name,x+12,y+7.5);
+      doc.addImage(m.data,"PNG",x+(lw-iw)/2,y+14,iw,h2);
+      doc.setFontSize(11);doc.text(`${r.fit.cols} x ${r.fit.hi} = ${fmt(r.fit.per)} per wall`,x,y+ih+30)});
+    y+=ih+44;
+  }
+  heading(Noun+" load plan",220);
+  for(let i=0;i<cons.length;i++){const c=cons[i];
+    const [iso,top]=await Promise.all([svgToPng(floorIsoSVG(T,c,i),1600),svgToPng(floorTopSVG(T,c,i),1600)]);
+    const h1=CW*iso.ratio,h2=CW*top.ratio;need(h1+h2+70);
+    doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...ink);doc.text(`${Noun} ${i+1}`,M,y+10);
+    doc.setFont("courier","normal");doc.setFontSize(8.5);doc.setTextColor(...muted);
+    doc.text(`${fmt(c.cartons)} cartons  ${fmt(toW(c.wt))} / ${fW(T.max)}  ${fLong(c.used).split(" ")[0]} of ${fLong(T.L)} used`,M+CW,y+10,{align:"right"});
+    doc.addImage(iso.data,"PNG",M,y+16,CW,h1);doc.addImage(top.data,"PNG",M,y+20+h1,CW,h2);
+    const fp=c.wt?c.front/c.wt*100:0,pct=T.max>0?c.wt/T.max*100:0;
+    doc.setFont("helvetica","normal");doc.setTextColor(...(c.byWt?[180,64,31]:muted));
+    doc.text(`Weight check: ${fW(c.wt)} of ${fW(T.max)} payload (${fmt(pct)}%)${c.byWt?", full by weight":""}  ·  front half ${fmt(fp)}%, rear half ${fmt(100-fp)}%`,M,y+h1+h2+34);
+    y+=h1+h2+50;
+  }
+  heading("Load list (nose to doors)",60);
+  const body=[];cons.forEach((c,i)=>c.secs.forEach(sc=>body.push([`${Noun} ${i+1}`,sc.rec.sku.name,`${fLong(sc.x0)} - ${fLong(sc.x1)}`,sc.walls.length,fmt(sc.cartons),fmt(toW(sc.wt))])));
+  doc.autoTable({startY:y,margin:{left:M,right:M},theme:"grid",styles:{fontSize:8.5,cellPadding:4,textColor:ink,lineColor:[211,216,222]},
+    headStyles:{fillColor:[29,35,43],textColor:255,fontStyle:"bold"},
+    head:[[Noun,"Item","From nose","Walls","Cartons",`Weight ${uW()}`]],body,
+    columnStyles:{3:{halign:"right"},4:{halign:"right"},5:{halign:"right"}}});
+  pdfFooter(doc,`Ti:Hi Shipment Builder  ·  ${date}`,PW,PH,M);
+  return doc;
+}
+const buildReport=()=>LAST&&LAST.mode==="floor"?buildFloorPdf():buildPdf();
+window.__tihi_pdf=async()=>(await buildReport()).output("blob");
 /* Download and Print buttons for every PDF report. Print loads the PDF into a hidden frame
    and opens the browser's print dialog; if the browser blocks that, it opens the PDF in a new tab
    set to print. */
@@ -1239,7 +1538,7 @@ function wirePdf({dl,pr,msg,build,file}){
   $(pr).addEventListener("click",()=>run(pr,"Preparing...","Print report",async doc=>{await printPdf(doc);say("Sent to the print dialog.")}));
 }
 const today=()=>new Date().toISOString().slice(0,10);
-wirePdf({dl:"pdfBtn",pr:"pdfPrint",msg:"pdfMsg",build:buildPdf,file:()=>`TiHi-load-report-${today()}.pdf`});
+wirePdf({dl:"pdfBtn",pr:"pdfPrint",msg:"pdfMsg",build:buildReport,file:()=>`TiHi-${LAST&&LAST.mode==="floor"?"floor-load":"load"}-report-${today()}.pdf`});
 
 /* ---------- SAVED ITEMS LIBRARY ---------- */
 let LIBDB=null,LIBW=true,LIB=[],delArm=null;
@@ -1480,7 +1779,7 @@ $("pkgCount").addEventListener("change",e=>{
 $("pkgList").addEventListener("input",e=>{
   const it=e.target.closest(".item"),f=e.target.dataset.f;if(!it||!f)return;
   const p=state.packages[+it.dataset.i];
-  p[f]=(f==="name"||f==="pallet")?e.target.value:f==="wt"?fromW(num(e.target.value)):f==="qty"?num(e.target.value):fromL(num(e.target.value));
+  p[f]=(f==="name"||f==="pallet")?e.target.value:f==="wt"?fromW(num(e.target.value)):f==="qty"?(e.target.value.trim()===""?null:num(e.target.value)):fromL(num(e.target.value));
   if(f==="name"){const it=LIB.find(x=>String(x.name).trim().toLowerCase()===e.target.value.trim().toLowerCase());
     if(it){const n=+e.target.closest(".item").dataset.i;
       ["L","W","H","wt"].forEach(k=>{p[k]=+it[k];const el=$(`pk-${k}-${n}`);if(el)el.value=k==="wt"?vW(+it[k]):vL(+it[k])});libMsg(`Filled in ${it.name} from saved items.`)}}
@@ -1507,11 +1806,15 @@ $("addPallet").addEventListener("click",()=>{
   const el=$("pl-name-"+id);if(el){el.focus();el.select()}
 });
 const bindNum=(id,key)=>$(id).addEventListener("input",e=>{state[key]=fromL(num(e.target.value));rerender()});
-bindNum("stackH","stackH");bindNum("overhang","overhang");
+bindNum("stackH","stackH");bindNum("overhang","overhang");bindNum("floorGap","floorGap");
+$("allowTipF").addEventListener("change",e=>{state.allowTip=e.target.checked;$("allowTip").checked=state.allowTip;rerender()});
+$("fillSplit").addEventListener("change",e=>{state.fillSplit=e.target.value;rerender()});
+$("loadTabs").addEventListener("click",e=>{const m=e.target.closest("button")?.dataset.m;if(!m||m===state.loadMode)return;
+  state.loadMode=m;syncGlobals();renderPkgs();rerender()});
 const bindTruckNum=(id,key)=>$(id).addEventListener("input",e=>{state[key]=key==="tMax"?fromW(num(e.target.value)):fromL(num(e.target.value));state.truck="custom";$("truckPreset").value="custom";rerender()});
 bindTruckNum("tL","tL");bindTruckNum("tW","tW");bindTruckNum("tH","tH");bindTruckNum("tMax","tMax");
 $("stackInclPallet").addEventListener("change",e=>{state.stackInclPallet=e.target.checked;rerender()});
-$("allowTip").addEventListener("change",e=>{state.allowTip=e.target.checked;rerender()});
+$("allowTip").addEventListener("change",e=>{state.allowTip=e.target.checked;$("allowTipF").checked=state.allowTip;rerender()});
 $("comingle").addEventListener("change",e=>{state.comingle=e.target.checked;$("evenQty").disabled=!state.comingle;rerender()});
 $("evenQty").addEventListener("change",e=>{state.evenQty=e.target.checked;rerender()});
 $("dbl").addEventListener("change",e=>{state.dbl=e.target.checked;rerender()});
@@ -1524,7 +1827,7 @@ function renderUnits(){
   document.querySelectorAll("#unitTabs button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.u===UNITS));
   document.querySelectorAll("#builderPage .u-len").forEach(x=>x.textContent=uL());
   document.querySelectorAll("#builderPage .u-wt").forEach(x=>x.textContent=uW());
-  $("pkgUnitHint").textContent=MET()?"Dimensions in centimeters, weight in kilograms":"Dimensions in inches, weight in pounds";
+  $("pkgUnitHint").textContent=MET()?"Dimensions in millimeters, weight in kilograms":"Dimensions in inches, weight in pounds";
   $("trkUnitHint").textContent=MET()?"A 53 ft van is about 16,002 × 2,502 × 2,743 mm with a 20,400 kg payload.":"A 53 ft van is about 630 × 98.5 × 108 in with a 45,000 lb payload.";
 }
 $("unitTabs").addEventListener("click",e=>{const u=e.target.closest("button")?.dataset.u;if(!u||u===UNITS)return;
