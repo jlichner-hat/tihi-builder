@@ -228,7 +228,9 @@ th.opt{text-align:right}
     <h1>Ti:Hi Shipment Builder</h1>
     <p class="sub">Enter your item sizes, pick pallets and a stack height, and get items per layer (Ti), layers per pallet (Hi), a picture and spec sheet for every finished pallet, and a trailer or container floor plan.</p>
   </div>
-  <div class="hdr-actions"><button id="resetBtn" type="button">Load example data</button>
+  <div class="hdr-actions"><div class="tabs" id="unitTabs" role="group" aria-label="Units for entering sizes and weights">
+      <button type="button" data-u="imperial" aria-pressed="true">Inches · lb</button><button type="button" data-u="metric" aria-pressed="false">Metric · cm · kg</button></div>
+    <button id="resetBtn" type="button">Load example data</button>
     <button id="pdfPrint" type="button">Print report</button>
     <button id="pdfBtn" class="primary" type="button">Download PDF report</button></div>
   <p id="pdfMsg" class="hint" role="status" hidden></p>
@@ -242,7 +244,7 @@ th.opt{text-align:right}
       <label for="pkgCount">Number of different items
         <input id="pkgCount" type="number" min="1" max="20" step="1" value="3">
       </label>
-      <p class="hint">Dimensions in inches, weight in pounds per item. L × W is the footprint; H is the side that stays up.</p>
+      <p class="hint"><span id="pkgUnitHint">Dimensions in inches, weight in pounds</span> per item. L × W is the footprint; H is the side that stays up.</p>
       <datalist id="libNames"></datalist>
       <div id="libBox" class="lib">
         <div class="lib-row">
@@ -261,9 +263,9 @@ th.opt{text-align:right}
         <button id="addPallet" type="button">+ Custom pallet</button></div>
       <div id="palList" class="col"></div>
       <div class="row r2">
-        <label for="stackH">Max stack height (in)
+        <label for="stackH">Max stack height (<span class="u-len">in</span>)
           <input id="stackH" type="number" min="1" step="0.5" value="52"></label>
-        <label for="overhang">Allowed overhang per side (in)
+        <label for="overhang">Allowed overhang per side (<span class="u-len">in</span>)
           <input id="overhang" type="number" min="0" step="0.25" value="0"></label>
       </div>
       <label class="check" for="stackInclPallet"><input id="stackInclPallet" type="checkbox"> Stack height includes the pallet itself</label>
@@ -295,13 +297,13 @@ th.opt{text-align:right}
           <option value="custom">Custom</option>
         </select></label>
       <div class="row r4">
-        <label for="tL">Length (in)<input id="tL" type="number" step="0.5"></label>
-        <label for="tW">Width (in)<input id="tW" type="number" step="0.5"></label>
-        <label for="tH">Height (in)<input id="tH" type="number" step="0.5"></label>
-        <label for="tMax">Max lb<input id="tMax" type="number" step="100"></label>
+        <label for="tL">Length (<span class="u-len">in</span>)<input id="tL" type="number" step="0.5"></label>
+        <label for="tW">Width (<span class="u-len">in</span>)<input id="tW" type="number" step="0.5"></label>
+        <label for="tH">Height (<span class="u-len">in</span>)<input id="tH" type="number" step="0.5"></label>
+        <label for="tMax">Max <span class="u-wt">lb</span><input id="tMax" type="number" step="100"></label>
       </div>
       <label class="check" for="dbl"><input id="dbl" type="checkbox"> Allow double-stacking pallets</label>
-      <p class="hint">Interior dimensions. A 53 ft van is about 630 × 98.5 × 108 in with a 45,000 lb payload. Container weights are the box's rated payload, and road weight limits are often lower. Check your carrier's numbers.</p>
+      <p class="hint">Interior dimensions. <span id="trkUnitHint">A 53 ft van is about 630 × 98.5 × 108 in with a 45,000 lb payload.</span> Container weights are the box's rated payload, and road weight limits are often lower. Check your carrier's numbers.</p>
     </section>
   </div>
 
@@ -609,6 +611,20 @@ const $=id=>document.getElementById(id);
 const num=(v,d=0)=>{const n=parseFloat(v);return isFinite(n)?n:d};
 const fmt=(n,d=0)=>Number(n).toLocaleString(undefined,{maximumFractionDigits:d,minimumFractionDigits:d});
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+/* ---------- UNITS (Shipment builder) ----------
+   Every calculation runs in inches and pounds, exactly as before. Metric only changes what is typed
+   and shown on this page and its PDF: inputs are converted to inches/pounds as they are entered. */
+const CM=2.54,KG=0.45359237,UNIT_KEY="tihi.units";
+let UNITS=(()=>{try{return localStorage.getItem(UNIT_KEY)==="metric"?"metric":"imperial"}catch(e){return "imperial"}})();
+const MET=()=>UNITS==="metric";
+const uL=()=>MET()?"cm":"in", uW=()=>MET()?"kg":"lb";
+const toL=v=>MET()?v*CM:v, toW=v=>MET()?v*KG:v;          // stored (in, lb) -> shown
+const fromL=v=>MET()?v/CM:v, fromW=v=>MET()?v/KG:v;      // typed -> stored (in, lb)
+const vL=v=>+(+toL(+v)).toFixed(MET()?2:3), vW=v=>+(+toW(+v)).toFixed(MET()?2:3); // input box values
+const fL=(v,d=1)=>`${fmt(toL(v),d)} ${uL()}`, fW=(v,d=0)=>`${fmt(toW(v),d)} ${uW()}`;
+const fLong=(v,d=1)=>MET()?`${fmt(v*CM/100,d)} m`:`${fmt(v/12,d)} ft`;   // truck lengths
+const fCube=v=>MET()?`${fmt(v*Math.pow(CM/100,3),2)} m³`:`${fmt(v/1728,1)} ft³`;
+const fDims=(a,d=1,sep=" × ")=>a.map(x=>fmt(toL(x),d)).join(sep)+" "+uL();
 
 /* ---------- LAYER PATTERN (Ti) ----------
    Recursive guillotine block search: fill a rectangle with blocks of the box in either
@@ -759,7 +775,7 @@ function loadTruck(built){
   const warnings=[];
   // 1. form units (single pallets or double stacks)
   let units=built.map(b=>({items:[b],L:b.footL,W:b.footW,h:b.height,wt:b.weight}));
-  units.forEach(u=>{if(u.h>T.H)warnings.push(`Pallet ${u.items[0].id} is ${fmt(u.h,1)} in tall, taller than the trailer.`)});
+  units.forEach(u=>{if(u.h>T.H)warnings.push(`Pallet ${u.items[0].id} is ${fL(u.h)} tall, taller than the trailer.`)});
   if(state.dbl){
     const sorted=[...units].sort((a,b)=>b.wt-a.wt); const used=new Set(); const out=[];
     for(let i=0;i<sorted.length;i++){
@@ -782,7 +798,7 @@ function loadTruck(built){
   for(const g of ordered){
     const {L,W}=g[0];
     const opts=[{depth:L,across:W},{depth:W,across:L}].map(o=>({...o,n:Math.floor(T.W/o.across+1e-9)})).filter(o=>o.n>0);
-    if(!opts.length){warnings.push(`${L} × ${W} in pallets are wider than the trailer.`);continue}
+    if(!opts.length){warnings.push(`${fDims([L,W],1)} pallets are wider than the trailer.`);continue}
     opts.sort((a,b)=>(b.n/b.depth)-(a.n/a.depth));
     const o=opts[0];
     // heavy units spread: alternate heaviest and lighter so rows balance
@@ -808,7 +824,7 @@ function loadTruck(built){
 /* ---------- RENDER: inputs ---------- */
 function palletOptions(sel,withAuto){
   return (withAuto?`<option value="auto"${sel==="auto"?" selected":""}>Auto (best fit)</option>`:"")+
-    state.pallets.map(p=>`<option value="${p.id}"${sel===p.id?" selected":""}>${esc(p.name)} (${p.L}×${p.W})</option>`).join("");
+    state.pallets.map(p=>`<option value="${p.id}"${sel===p.id?" selected":""}>${esc(p.name)} (${fmt(toL(p.L),1)}×${fmt(toL(p.W),1)}${MET()?" cm":""})</option>`).join("");
 }
 function renderPkgs(){
   $("pkgList").innerHTML=state.packages.map((p,i)=>`
@@ -817,10 +833,10 @@ function renderPkgs(){
        <input id="pk-name-${i}" data-f="name" list="libNames" autocomplete="off" value="${esc(p.name)}" aria-label="Item ${i+1} name">
        <button type="button" class="save" data-save="${i}"${LIBDB?"":" disabled"} title="Save this package's size and weight">Save</button></div>
      <div class="row r4">
-       <label for="pk-L-${i}">L in<input id="pk-L-${i}" data-f="L" type="number" min="0" step="0.25" value="${p.L}"></label>
-       <label for="pk-W-${i}">W in<input id="pk-W-${i}" data-f="W" type="number" min="0" step="0.25" value="${p.W}"></label>
-       <label for="pk-H-${i}">H in<input id="pk-H-${i}" data-f="H" type="number" min="0" step="0.25" value="${p.H}"></label>
-       <label for="pk-wt-${i}">Wt lb<input id="pk-wt-${i}" data-f="wt" type="number" min="0" step="0.1" value="${p.wt}"></label>
+       <label for="pk-L-${i}">L ${uL()}<input id="pk-L-${i}" data-f="L" type="number" min="0" step="any" value="${vL(p.L)}"></label>
+       <label for="pk-W-${i}">W ${uL()}<input id="pk-W-${i}" data-f="W" type="number" min="0" step="any" value="${vL(p.W)}"></label>
+       <label for="pk-H-${i}">H ${uL()}<input id="pk-H-${i}" data-f="H" type="number" min="0" step="any" value="${vL(p.H)}"></label>
+       <label for="pk-wt-${i}">Wt ${uW()}<input id="pk-wt-${i}" data-f="wt" type="number" min="0" step="any" value="${vW(p.wt)}"></label>
      </div>
      <div class="row r2">
        <label for="pk-qty-${i}">Quantity to ship<input id="pk-qty-${i}" data-f="qty" type="number" min="0" step="1" value="${p.qty}"></label>
@@ -835,19 +851,19 @@ function renderPallets(){
        <input id="pl-name-${p.id}" data-f="name" value="${esc(p.name)}" aria-label="Pallet name">
        ${p.fixed?'<span class="pill">Default</span>':`<button class="x" type="button" data-del="${i}" aria-label="Remove ${esc(p.name)}">Remove</button>`}</div>
      <div class="row r3">
-       <label for="pl-L-${p.id}">Length in<input id="pl-L-${p.id}" data-f="L" type="number" min="0" step="0.5" value="${p.L}"></label>
-       <label for="pl-W-${p.id}">Width in<input id="pl-W-${p.id}" data-f="W" type="number" min="0" step="0.5" value="${p.W}"></label>
-       <label for="pl-H-${p.id}">Pallet ht in<input id="pl-H-${p.id}" data-f="H" type="number" min="0" step="0.25" value="${p.H}"></label>
-       <label for="pl-tare-${p.id}">Pallet lb<input id="pl-tare-${p.id}" data-f="tare" type="number" min="0" step="1" value="${p.tare}"></label>
-       <label for="pl-max-${p.id}">Max load lb<input id="pl-max-${p.id}" data-f="max" type="number" min="0" step="50" value="${p.max}"></label>
+       <label for="pl-L-${p.id}">Length ${uL()}<input id="pl-L-${p.id}" data-f="L" type="number" min="0" step="any" value="${vL(p.L)}"></label>
+       <label for="pl-W-${p.id}">Width ${uL()}<input id="pl-W-${p.id}" data-f="W" type="number" min="0" step="any" value="${vL(p.W)}"></label>
+       <label for="pl-H-${p.id}">Pallet ht ${uL()}<input id="pl-H-${p.id}" data-f="H" type="number" min="0" step="any" value="${vL(p.H)}"></label>
+       <label for="pl-tare-${p.id}">Pallet ${uW()}<input id="pl-tare-${p.id}" data-f="tare" type="number" min="0" step="any" value="${vW(p.tare)}"></label>
+       <label for="pl-max-${p.id}">Max load ${uW()}<input id="pl-max-${p.id}" data-f="max" type="number" min="0" step="any" value="${vW(p.max)}"></label>
      </div>
    </div>`).join("");
   $("mixPallet").innerHTML=palletOptions(state.mixPallet,false);
 }
 function syncGlobals(){
-  $("pkgCount").value=state.packages.length;$("stackH").value=state.stackH;$("overhang").value=state.overhang;
+  $("pkgCount").value=state.packages.length;$("stackH").value=vL(state.stackH);$("overhang").value=vL(state.overhang);
   $("stackInclPallet").checked=state.stackInclPallet;$("allowTip").checked=state.allowTip;$("comingle").checked=!!state.comingle;$("evenQty").checked=!!state.evenQty;$("evenQty").disabled=!state.comingle;
-  $("truckPreset").value=state.truck;$("tL").value=state.tL;$("tW").value=state.tW;$("tH").value=state.tH;$("tMax").value=state.tMax;$("dbl").checked=state.dbl;
+  $("truckPreset").value=state.truck;$("tL").value=vL(state.tL);$("tW").value=vL(state.tW);$("tH").value=vL(state.tH);$("tMax").value=vW(state.tMax);$("dbl").checked=state.dbl;
 }
 
 /* ---------- RENDER: drawings ---------- */
@@ -922,13 +938,14 @@ function truckSVG(T,t,ti){
     const label=u.items.map(b=>"P"+b.id).join("/");
     const fs=Math.max(5,Math.min(11,w/(label.length*0.68),h/3.4));
     s+=`<text x="${x+w/2}" y="${y+h/2-fs*0.15}" font-size="${fs}" text-anchor="middle" fill="#fff" font-family="var(--f-mono)" font-weight="600" paint-order="stroke" stroke="rgba(0,0,0,.6)" stroke-width="${fs/4}">${label}</text>
-        <text x="${x+w/2}" y="${y+h/2+fs*0.95}" font-size="${fs*0.78}" text-anchor="middle" fill="#fff" font-family="var(--f-mono)" paint-order="stroke" stroke="rgba(0,0,0,.6)" stroke-width="${fs/4}">${fmt(u.wt)}#</text>`;
+        <text x="${x+w/2}" y="${y+h/2+fs*0.95}" font-size="${fs*0.78}" text-anchor="middle" fill="#fff" font-family="var(--f-mono)" paint-order="stroke" stroke="rgba(0,0,0,.6)" stroke-width="${fs/4}">${fmt(toW(u.wt))}${MET()?"kg":"#"}</text>`;
   }
   // length scale
   const sy=top+T.W+14;
   s+=`<line x1="${pad}" x2="${pad+T.L}" y1="${sy}" y2="${sy}" stroke="var(--muted)"/>`;
-  for(let f=0;f*12<=T.L;f+=5){const x=pad+f*12;s+=`<line x1="${x}" x2="${x}" y1="${sy-3}" y2="${sy+3}" stroke="var(--muted)"/>`;
-    if(f%10===0)s+=`<text x="${x}" y="${sy+14}" font-size="9" text-anchor="middle" fill="var(--muted)" font-family="var(--f-mono)">${f} ft</text>`}
+  const met=MET(),step=met?100/CM:12*5,lab=2; // tick every 1 m or 5 ft, label every other tick
+  for(let k=0;k*step<=T.L+1e-6;k++){const x=pad+k*step;s+=`<line x1="${x}" x2="${x}" y1="${sy-3}" y2="${sy+3}" stroke="var(--muted)"/>`;
+    if(k%lab===0)s+=`<text x="${x}" y="${sy+14}" font-size="9" text-anchor="middle" fill="var(--muted)" font-family="var(--f-mono)">${met?k+" m":k*5+" ft"}</text>`}
   return `<svg viewBox="0 0 ${vbW} ${vbH+6}" role="img" aria-label="Truck ${ti+1} floor plan">${s}</svg>`;
 }
 
@@ -952,7 +969,7 @@ function renderResults(){
     <div class="tile hl"><span class="k">Pallets</span><span class="v">${R.built.length}</span><span class="s">${R.built.filter(b=>b.type==="full").length} full · ${R.built.filter(b=>b.type!=="full").length} mixed/partial</span></div>
     <div class="tile hl"><span class="k">Trucks</span><span class="v">${TL.trucks.filter(t=>t.units.length).length||0}</span><span class="s">${positions} floor spots used</span></div>
     <div class="tile"><span class="k">Items</span><span class="v">${fmt(totalCases)}</span><span class="s">${state.packages.length} sizes</span></div>
-    <div class="tile"><span class="k">Gross weight</span><span class="v">${fmt(totalWt)}</span><span class="s">lb incl. pallets</span></div>
+    <div class="tile"><span class="k">Gross weight</span><span class="v">${fmt(toW(totalWt))}</span><span class="s">${uW()} incl. pallets</span></div>
   </div>`;
 
   // Ti:Hi cards
@@ -968,10 +985,10 @@ function renderResults(){
       <div class="figs"><figure>${layerSVG(res,s.idx)}<figcaption>Layer, top view</figcaption></figure>
         <figure>${sideSVG(fullP,maxH)}<figcaption>Side view · red = max height</figcaption></figure></div>
       <dl class="kv">
-        <dt>Placed as</dt><dd>${res.l}×${res.w} footprint, ${res.h} in up</dd>
+        <dt>Placed as</dt><dd>${fmt(toL(res.l),1)}×${fmt(toL(res.w),1)} footprint, ${fL(res.h)} up</dd>
         <dt>Layer coverage</dt><dd>${fmt(eff,1)}%</dd>
-        <dt>Pallet height</dt><dd>${fmt(res.pallet.H+res.hi*res.h,1)} in</dd>
-        <dt>Pallet weight</dt><dd>${fmt(res.cases*s.wt+res.pallet.tare)} lb</dd>
+        <dt>Pallet height</dt><dd>${fL(res.pallet.H+res.hi*res.h)}</dd>
+        <dt>Pallet weight</dt><dd>${fW(res.cases*s.wt+res.pallet.tare)}</dd>
         <dt>Limited by</dt><dd>${res.limitedBy==="weight"?'<span class="pill warn">weight</span>':"height"}</dd>
         <dt>${fmt(s.qty)} to ship</dt><dd>${r.mixAll?"commingled on mixed pallets":`${r.full} full + ${fmt(r.rem)} left over`}</dd>
       </dl></div>`;
@@ -986,22 +1003,22 @@ function renderResults(){
     const ids=n>1?`P${b.id}–P${r.list[n-1].id}`:`P${b.id}`;
     const pill=b.type==="full"?'<span class="pill">Full</span>':b.type==="mixed"?'<span class="pill mix">Mixed</span>':'<span class="pill">Partial</span>';
     const counts=new Map();b.layers.forEach(l=>counts.set(l.sku.idx,(counts.get(l.sku.idx)||0)+l.cases));
-    const net=b.weight-b.pallet.tare, cube=d.L*d.W*d.H/1728;
+    const net=b.weight-b.pallet.tare, cube=d.L*d.W*d.H;
     const tr=[...new Set(r.list.map(x=>loc0.get(x.id)).filter(Boolean))].map(t=>"Truck "+t).join(", ");
     const over=d.H>(state.stackInclPallet?state.stackH:state.stackH+b.pallet.H)+1e-6;
     h+=`<div class="card">
       <div class="panel-head"><span class="mono" style="font-weight:600">${ids}</span><span>${n>1?`<span class="pill">× ${n}</span> `:""}${pill}</span></div>
       <figure class="iso">${isoSVG(b)}</figure>
-      <div class="dims mono">${fmt(d.L,1)} × ${fmt(d.W,1)} × ${fmt(d.H,1)} in</div>
+      <div class="dims mono">${fDims([d.L,d.W,d.H])}</div>
       <dl class="kv">
-        <dt>Overall L × W</dt><dd>${fmt(d.L,1)} × ${fmt(d.W,1)} in</dd>
-        <dt>Overall height</dt><dd>${fmt(d.H,1)} in${over?' <span class="pill warn">over</span>':""}</dd>
-        <dt>Gross weight</dt><dd><b>${fmt(b.weight)} lb</b></dd>
-        <dt>Product weight</dt><dd>${fmt(net)} lb</dd>
-        <dt>Pallet (${esc(b.pallet.name)})</dt><dd>${fmt(b.pallet.tare)} lb</dd>
+        <dt>Overall L × W</dt><dd>${fDims([d.L,d.W])}</dd>
+        <dt>Overall height</dt><dd>${fL(d.H)}${over?' <span class="pill warn">over</span>':""}</dd>
+        <dt>Gross weight</dt><dd><b>${fW(b.weight)}</b></dd>
+        <dt>Product weight</dt><dd>${fW(net)}</dd>
+        <dt>Pallet (${esc(b.pallet.name)})</dt><dd>${fW(b.pallet.tare)}</dd>
         <dt>Items · layers</dt><dd>${b.cases} · ${b.layers.length}</dd>
-        <dt>Cube</dt><dd>${fmt(cube,1)} ft³</dd>
-        ${n>1?`<dt>All ${n} pallets</dt><dd>${fmt(b.weight*n)} lb</dd>`:""}
+        <dt>Cube</dt><dd>${fCube(cube)}</dd>
+        ${n>1?`<dt>All ${n} pallets</dt><dd>${fW(b.weight*n)}</dd>`:""}
         <dt>Loaded on</dt><dd>${tr||"–"}</dd>
       </dl>
       <div class="legend">${[...counts].map(([k,c])=>`<span><i class="swatch" style="background:${color(k)}"></i>${esc(state.packages[k].name)} × ${c}</span>`).join("")}</div>
@@ -1011,23 +1028,23 @@ function renderResults(){
 
   // Truck
   h+=`<section class="panel"><div class="panel-head"><h2>Truck load plan</h2>
-    <span class="hint">${fmt(TL.T.L/12,1)} ft × ${fmt(TL.T.W,1)} in · ${state.dbl?"double-stacking on":"single-stacked"}</span></div>`;
+    <span class="hint">${fLong(TL.T.L)} × ${fL(TL.T.W)} · ${state.dbl?"double-stacking on":"single-stacked"}</span></div>`;
   TL.trucks.forEach((t,i)=>{
     if(!t.units.length) return;
     const fp=t.wt?t.front/t.wt*100:0;
     h+=`<div class="col">
       <div class="panel-head"><h3>Truck ${i+1}</h3>
-        <span class="mono hint">${t.pallets} pallets · ${fmt(t.wt)} / ${fmt(TL.T.max)} lb · ${fmt(t.used/12,1)} of ${fmt(TL.T.L/12,1)} ft used</span></div>
+        <span class="mono hint">${t.pallets} pallets · ${fmt(toW(t.wt))} / ${fW(TL.T.max)} · ${fLong(t.used).split(" ")[0]} of ${fLong(TL.T.L)} used</span></div>
       <div class="truckwrap">${truckSVG(TL.T,t,i)}</div>
       <div class="balance"><div class="bar"><i style="width:${fp}%;background:var(--c2)"></i><i style="width:${100-fp}%;background:var(--c1)"></i></div>
-      <span class="hint">Front half ${fmt(t.front)} lb (${fmt(fp,0)}%) · rear half ${fmt(t.rear)} lb (${fmt(100-fp,0)}%). Heaviest pallets load first, toward the nose. Aim for close to even.</span></div>
+      <span class="hint">Front half ${fW(t.front)} (${fmt(fp,0)}%) · rear half ${fW(t.rear)} (${fmt(100-fp,0)}%). Heaviest pallets load first, toward the nose. Aim for close to even.</span></div>
     </div>`;
   });
-  h+=`<div class="legend">${state.packages.map((p,i)=>`<span><i class="swatch" style="background:${color(i)}"></i>${esc(p.name)}</span>`).join("")}<span class="hint">Thick outline = double stack · # = lb</span></div></section>`;
+  h+=`<div class="legend">${state.packages.map((p,i)=>`<span><i class="swatch" style="background:${color(i)}"></i>${esc(p.name)}</span>`).join("")}<span class="hint">Thick outline = double stack${MET()?"":" · # = lb"}</span></div></section>`;
 
   // Pallet build list
   h+=`<section class="panel"><div class="panel-head"><h2>Pallet build list</h2><span class="hint">Layers listed bottom to top</span></div>
-   <div class="tablewrap"><table><thead><tr><th>Pallets</th><th class="n">Qty</th><th>Type</th><th>Base</th><th>Contents (each)</th><th class="n">Layers</th><th class="n">Pkgs</th><th class="n">Height in</th><th class="n">Weight lb</th><th>Truck</th></tr></thead><tbody>`;
+   <div class="tablewrap"><table><thead><tr><th>Pallets</th><th class="n">Qty</th><th>Type</th><th>Base</th><th>Contents (each)</th><th class="n">Layers</th><th class="n">Pkgs</th><th class="n">Height ${uL()}</th><th class="n">Weight ${uW()}</th><th>Truck</th></tr></thead><tbody>`;
   const loc=new Map();TL.trucks.forEach((t,ti)=>t.units.forEach(u=>u.u.items.forEach(b=>loc.set(b.id,ti+1))));
   const rows=groupBuilt(R.built);
   for(const r of rows){
@@ -1037,7 +1054,7 @@ function renderResults(){
     const pill=b.type==="full"?'<span class="pill">Full</span>':b.type==="mixed"?'<span class="pill mix">Mixed</span>':'<span class="pill">Partial</span>';
     const ids=n>1?`P${b.id}–P${r.list[n-1].id}`:`P${b.id}`;
     const tr=[...new Set(r.list.map(x=>loc.get(x.id)).filter(Boolean))].map(t=>"T"+t).join(", ");
-    h+=`<tr><td class="mono">${ids}</td><td class="n">${n}</td><td>${pill}</td><td>${esc(b.pallet.name)}</td><td>${contents}</td><td class="n">${b.layers.length}</td><td class="n">${b.cases}</td><td class="n">${fmt(b.height,1)}</td><td class="n">${fmt(b.weight)}</td><td class="mono">${tr||"–"}</td></tr>`;
+    h+=`<tr><td class="mono">${ids}</td><td class="n">${n}</td><td>${pill}</td><td>${esc(b.pallet.name)}</td><td>${contents}</td><td class="n">${b.layers.length}</td><td class="n">${b.cases}</td><td class="n">${fmt(toL(b.height),1)}</td><td class="n">${fmt(toW(b.weight))}</td><td class="mono">${tr||"–"}</td></tr>`;
   }
   h+=`</tbody></table></div>`;
   h+=`<p class="hint">Mixed pallets put the heaviest items on the bottom: full layers go heaviest item first, then partial layers on top, also heaviest first. Partial layers are shown at their share of the pallet length.</p></section>`;
@@ -1107,7 +1124,7 @@ async function buildPdf(){
   y=await pdfHeader(doc,"Ti:Hi Shipment Builder","Load report  \u00b7  "+date,PW,M);
   const totalCases=R.built.reduce((a,b)=>a+b.cases,0),totalWt=R.built.reduce((a,b)=>a+b.weight,0);
   const nTrucks=TL.trucks.filter(t=>t.units.length).length;
-  const tiles=[["Pallets",R.built.length],["Trucks",nTrucks],["Items",fmt(totalCases)],["Gross weight",fmt(totalWt)+" lb"]];
+  const tiles=[["Pallets",R.built.length],["Trucks",nTrucks],["Items",fmt(totalCases)],["Gross weight",fW(totalWt)]];
   const tw=(CW-30)/4;
   tiles.forEach(([k,v],i)=>{const x=M+i*(tw+10);doc.setDrawColor(211,216,222);doc.setLineWidth(.8);doc.rect(x,y,tw,46);
     doc.setFillColor(242,183,5);doc.rect(x,y+43,tw,3,"F");
@@ -1115,13 +1132,13 @@ async function buildPdf(){
     doc.setFont("helvetica","bold");doc.setFontSize(17);doc.setTextColor(...ink);doc.text(String(v),x+8,y+34)});
   y+=62;
   doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...muted);
-  const settings=`Max stack height ${state.stackH} in ${state.stackInclPallet?"(includes pallet)":"(product only, pallet added)"}  \u00b7  Overhang ${state.overhang} in/side  \u00b7  ${state.allowTip?"Items may lie on side":"Items kept upright"}${state.comingle?(state.evenQty?"  \u00b7  Items commingled, even quantities per pallet":"  \u00b7  Items commingled on pallets"):""}  \u00b7  Truck ${fmt(state.tL/12,1)} ft x ${state.tW} x ${state.tH} in, max ${fmt(state.tMax)} lb  \u00b7  ${state.dbl?"Double-stacking allowed":"Single-stacked"}`;
+  const settings=`Max stack height ${fL(state.stackH)} ${state.stackInclPallet?"(includes pallet)":"(product only, pallet added)"}  \u00b7  Overhang ${fL(state.overhang,MET()?1:2)}/side  \u00b7  ${state.allowTip?"Items may lie on side":"Items kept upright"}${state.comingle?(state.evenQty?"  \u00b7  Items commingled, even quantities per pallet":"  \u00b7  Items commingled on pallets"):""}  \u00b7  Truck ${fLong(state.tL)} x ${fDims([state.tW,state.tH],1," x ")}, max ${fW(state.tMax)}  \u00b7  ${state.dbl?"Double-stacking allowed":"Single-stacked"}`;
   const lines=doc.splitTextToSize(settings,CW);doc.text(lines,M,y);y+=lines.length*11+8;
   heading("Items and Ti:Hi");
   doc.autoTable({startY:y,margin:{left:M,right:M},theme:"grid",styles:{fontSize:8.5,cellPadding:4,textColor:ink,lineColor:[211,216,222]},
     headStyles:{fillColor:[29,35,43],textColor:255,fontStyle:"bold"},
-    head:[["Item","L x W x H in","Wt lb","Qty","Pallet","Ti","Hi","Per pallet","Full","Left over"]],
-    body:R.skus.map(r=>{const s=r.sku,x=r.res;return [s.name,`${s.L} x ${s.W} x ${s.H}`,fmt(s.wt,1),fmt(s.qty),x?x.pallet.name:"-",x?x.ti:"-",x?x.hi:"-",x?x.cases:"-",r.mixAll?"-":r.full,r.mixAll?"mixed":fmt(r.rem)]}),
+    head:[["Item",`L x W x H ${uL()}`,`Wt ${uW()}`,"Qty","Pallet","Ti","Hi","Per pallet","Full","Left over"]],
+    body:R.skus.map(r=>{const s=r.sku,x=r.res;return [s.name,[s.L,s.W,s.H].map(v=>fmt(toL(v),MET()?1:2)).join(" x "),fmt(toW(s.wt),1),fmt(s.qty),x?x.pallet.name:"-",x?x.ti:"-",x?x.hi:"-",x?x.cases:"-",r.mixAll?"-":r.full,r.mixAll?"mixed":fmt(r.rem)]}),
     columnStyles:{2:{halign:"right"},3:{halign:"right"},5:{halign:"right"},6:{halign:"right"},7:{halign:"right"},8:{halign:"right"},9:{halign:"right"}}});
   y=doc.lastAutoTable.finalY+16;
   // Layer patterns, 3 per row
@@ -1135,7 +1152,7 @@ async function buildPdf(){
       doc.setFillColor(...c);doc.rect(x,y,8,8,"F");doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(...ink);doc.text(r.sku.name,x+12,y+7.5);
       doc.addImage(imgs[j].data,"PNG",x,y+14,lw,lw*imgs[j].ratio);
       const yy=y+20+ih;doc.setFontSize(12);doc.text(`${r.res.ti}:${r.res.hi} = ${r.res.cases}`,x,yy+6);
-      kv(x,yy+20,lw,[["Placed as",`${r.res.l}x${r.res.w}, ${r.res.h} up`],["Limited by",r.res.limitedBy]])});
+      kv(x,yy+20,lw,[["Placed as",`${fmt(toL(r.res.l),1)}x${fmt(toL(r.res.w),1)}, ${fL(r.res.h)} up`],["Limited by",r.res.limitedBy]])});
     y+=ih+70;
   }
   // Finished pallets, 2 per row
@@ -1152,13 +1169,13 @@ async function buildPdf(){
       const m=imgs[j];let iw=fw-16,h2=iw*m.ratio;if(h2>ih){h2=ih;iw=ih/m.ratio}
       doc.addImage(m.data,"PNG",x+(fw-iw)/2,y+22,iw,h2);
       let yy=y+ih+34;doc.setFont("courier","bold");doc.setFontSize(11);doc.setTextColor(...ink);
-      doc.text(`${fmt(d.L,1)} x ${fmt(d.W,1)} x ${fmt(d.H,1)} in`,x+fw/2,yy,{align:"center"});
+      doc.text(fDims([d.L,d.W,d.H],1," x "),x+fw/2,yy,{align:"center"});
       const counts=new Map();b.layers.forEach(l=>counts.set(l.sku.idx,(counts.get(l.sku.idx)||0)+l.cases));
       const tr=[...new Set(g.list.map(p=>{let t0=0;TL.trucks.forEach((t,ti)=>t.units.forEach(u=>u.u.items.forEach(q=>{if(q.id===p.id)t0=ti+1})));return t0}).filter(Boolean))].map(t=>"Truck "+t).join(", ");
-      const pairs=[["Gross weight",fmt(b.weight)+" lb"],["Product / pallet",`${fmt(b.weight-b.pallet.tare)} / ${fmt(b.pallet.tare)} lb`],
-        ["Items / layers",`${b.cases} / ${b.layers.length}`],["Cube",fmt(d.L*d.W*d.H/1728,1)+" cu ft"],
+      const pairs=[["Gross weight",fW(b.weight)],["Product / pallet",`${fmt(toW(b.weight-b.pallet.tare))} / ${fW(b.pallet.tare)}`],
+        ["Items / layers",`${b.cases} / ${b.layers.length}`],["Cube",fCube(d.L*d.W*d.H).replace("ft³","cu ft").replace("m³","cu m")],
         ["Contents",[...counts].map(([k,c])=>`${state.packages[k].name} x ${c}`).join(", ")],["Loaded on",tr||"-"]];
-      if(n>1)pairs.splice(1,0,[`All ${n} pallets`,fmt(b.weight*n)+" lb"]);
+      if(n>1)pairs.splice(1,0,[`All ${n} pallets`,fW(b.weight*n)]);
       kv(x+8,yy+16,fw-16,pairs)});
     y+=ih+150;
   }
@@ -1168,19 +1185,19 @@ async function buildPdf(){
     const m=await svgToPng(truckSVG(TL.T,t,i),1600);const ih=CW*m.ratio;need(ih+50);
     doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...ink);doc.text(`Truck ${i+1}`,M,y+10);
     doc.setFont("courier","normal");doc.setFontSize(8.5);doc.setTextColor(...muted);
-    doc.text(`${t.pallets} pallets  ${fmt(t.wt)} / ${fmt(TL.T.max)} lb  ${fmt(t.used/12,1)} of ${fmt(TL.T.L/12,1)} ft used`,M+CW,y+10,{align:"right"});
+    doc.text(`${t.pallets} pallets  ${fmt(toW(t.wt))} / ${fW(TL.T.max)}  ${fLong(t.used).split(" ")[0]} of ${fLong(TL.T.L)} used`,M+CW,y+10,{align:"right"});
     doc.addImage(m.data,"PNG",M,y+16,CW,ih);
     const fp=t.wt?t.front/t.wt*100:0;
-    doc.setFont("helvetica","normal");doc.text(`Front half ${fmt(t.front)} lb (${fmt(fp)}%)  \u00b7  rear half ${fmt(t.rear)} lb (${fmt(100-fp)}%)`,M,y+ih+28);
+    doc.setFont("helvetica","normal");doc.text(`Front half ${fW(t.front)} (${fmt(fp)}%)  \u00b7  rear half ${fW(t.rear)} (${fmt(100-fp)}%)`,M,y+ih+28);
     y+=ih+44;
   }
   // Build list
   heading("Pallet build list",60);
   doc.autoTable({startY:y,margin:{left:M,right:M},theme:"grid",styles:{fontSize:8.5,cellPadding:4,textColor:ink,lineColor:[211,216,222]},
     headStyles:{fillColor:[29,35,43],textColor:255,fontStyle:"bold"},
-    head:[["Pallets","Qty","Type","Base","Contents (each)","Pkgs","Height in","Weight lb"]],
+    head:[["Pallets","Qty","Type","Base","Contents (each)","Pkgs",`Height ${uL()}`,`Weight ${uW()}`]],
     body:groups.map(g=>{const b=g.list[0],n=g.list.length;const counts=new Map();b.layers.forEach(l=>counts.set(l.sku.idx,(counts.get(l.sku.idx)||0)+l.cases));
-      return [n>1?`P${b.id}-P${g.list[n-1].id}`:`P${b.id}`,n,b.type,b.pallet.name,[...counts].map(([k,c])=>`${state.packages[k].name} x ${c}`).join(", "),b.cases,fmt(b.height,1),fmt(b.weight)]}),
+      return [n>1?`P${b.id}-P${g.list[n-1].id}`:`P${b.id}`,n,b.type,b.pallet.name,[...counts].map(([k,c])=>`${state.packages[k].name} x ${c}`).join(", "),b.cases,fmt(toL(b.height),1),fmt(toW(b.weight))]}),
     columnStyles:{1:{halign:"right"},5:{halign:"right"},6:{halign:"right"},7:{halign:"right"}}});
   pdfFooter(doc,`Ti:Hi Shipment Builder  \u00b7  ${date}`,PW,PH,M);
   return doc;
@@ -1229,14 +1246,14 @@ const libMsg=t=>{$("libMsg").textContent=t};
 const slug=n=>(String(n).toLowerCase().replace(/[^a-z0-9_-]+/g,"-").replace(/^-+|-+$/g,"").slice(0,80))||"item";
 function renderLib(){
   const sel=$("libSel"),keep=sel.value;
-  sel.innerHTML=LIB.length?LIB.map(it=>`<option value="${esc(it.id)}">${esc(it.name)}  (${it.L}×${it.W}×${it.H} in, ${it.wt} lb)</option>`).join("")
+  sel.innerHTML=LIB.length?LIB.map(it=>`<option value="${esc(it.id)}">${esc(it.name)}  (${vL(it.L)}×${vL(it.W)}×${vL(it.H)} ${uL()}, ${vW(it.wt)} ${uW()})</option>`).join("")
     :`<option value="">No saved items yet</option>`;
   if(LIB.some(it=>it.id===keep))sel.value=keep;
   $("libNames").innerHTML=LIB.map(it=>`<option value="${esc(it.name)}"></option>`).join("");
   sel.disabled=!LIB.length;$("libAdd").disabled=!LIB.length;
   LIBW=canBoxTools();$("libManage").hidden=!PROFILE||!LIBW;
   $("libHelp").hidden=!PROFILE||IS_ADMIN||PROFILE.role==="company_admin";
-  $("libList").innerHTML=LIB.length?LIB.map(it=>`<div class="lib-item"><span>${esc(it.name)} <span class="mono">${it.L}×${it.W}×${it.H} in · ${it.wt} lb</span></span>
+  $("libList").innerHTML=LIB.length?LIB.map(it=>`<div class="lib-item"><span>${esc(it.name)} <span class="mono">${vL(it.L)}×${vL(it.W)}×${vL(it.H)} ${uL()} · ${vW(it.wt)} ${uW()}</span></span>
     ${LIBW?`<button type="button" class="x" data-libdel="${esc(it.id)}">${delArm===it.id?"Confirm remove":"Remove"}</button>`:""}</div>`).join("")
     :`<p class="hint">Nothing saved yet.</p>`;
   document.querySelectorAll("#pkgList button.save").forEach(b=>b.disabled=!LIBDB);
@@ -1462,16 +1479,16 @@ $("pkgCount").addEventListener("change",e=>{
 $("pkgList").addEventListener("input",e=>{
   const it=e.target.closest(".item"),f=e.target.dataset.f;if(!it||!f)return;
   const p=state.packages[+it.dataset.i];
-  p[f]=(f==="name"||f==="pallet")?e.target.value:num(e.target.value);
+  p[f]=(f==="name"||f==="pallet")?e.target.value:f==="wt"?fromW(num(e.target.value)):f==="qty"?num(e.target.value):fromL(num(e.target.value));
   if(f==="name"){const it=LIB.find(x=>String(x.name).trim().toLowerCase()===e.target.value.trim().toLowerCase());
     if(it){const n=+e.target.closest(".item").dataset.i;
-      ["L","W","H","wt"].forEach(k=>{p[k]=+it[k];const el=$(`pk-${k}-${n}`);if(el)el.value=it[k]});libMsg(`Filled in ${it.name} from saved items.`)}}
+      ["L","W","H","wt"].forEach(k=>{p[k]=+it[k];const el=$(`pk-${k}-${n}`);if(el)el.value=k==="wt"?vW(+it[k]):vL(+it[k])});libMsg(`Filled in ${it.name} from saved items.`)}}
   rerender();
 });
 $("palList").addEventListener("input",e=>{
   const it=e.target.closest(".item"),f=e.target.dataset.f;if(!it||!f)return;
   const p=state.pallets[+it.dataset.p];
-  p[f]=f==="name"?e.target.value:num(e.target.value);
+  p[f]=f==="name"?e.target.value:(f==="tare"||f==="max")?fromW(num(e.target.value)):fromL(num(e.target.value));
   if(f==="name"){$("mixPallet").innerHTML=palletOptions(state.mixPallet,false);
     document.querySelectorAll('#pkgList select[data-f="pallet"]').forEach((s,i)=>{s.innerHTML=palletOptions(state.packages[i].pallet,true)})}
   rerender();
@@ -1488,9 +1505,9 @@ $("addPallet").addEventListener("click",()=>{
   renderPallets();renderPkgs();rerender();
   const el=$("pl-name-"+id);if(el){el.focus();el.select()}
 });
-const bindNum=(id,key)=>$(id).addEventListener("input",e=>{state[key]=num(e.target.value);rerender()});
+const bindNum=(id,key)=>$(id).addEventListener("input",e=>{state[key]=fromL(num(e.target.value));rerender()});
 bindNum("stackH","stackH");bindNum("overhang","overhang");
-const bindTruckNum=(id,key)=>$(id).addEventListener("input",e=>{state[key]=num(e.target.value);state.truck="custom";$("truckPreset").value="custom";rerender()});
+const bindTruckNum=(id,key)=>$(id).addEventListener("input",e=>{state[key]=key==="tMax"?fromW(num(e.target.value)):fromL(num(e.target.value));state.truck="custom";$("truckPreset").value="custom";rerender()});
 bindTruckNum("tL","tL");bindTruckNum("tW","tW");bindTruckNum("tH","tH");bindTruckNum("tMax","tMax");
 $("stackInclPallet").addEventListener("change",e=>{state.stackInclPallet=e.target.checked;rerender()});
 $("allowTip").addEventListener("change",e=>{state.allowTip=e.target.checked;rerender()});
@@ -1501,7 +1518,17 @@ $("mixPallet").addEventListener("change",e=>{state.mixPallet=e.target.value;rere
 $("truckPreset").addEventListener("change",e=>{state.truck=e.target.value;const t=TRUCKS[e.target.value];
   if(t){state.tL=t.L;state.tW=t.W;state.tH=t.H;state.tMax=t.max;syncGlobals()}rerender()});
 $("resetBtn").addEventListener("click",()=>{state=JSON.parse(JSON.stringify(EXAMPLE));palSeq=1;init()});
-function init(){syncGlobals();renderPkgs();renderPallets();rerender()}
+function init(){syncGlobals();renderPkgs();renderPallets();renderUnits();rerender()}
+function renderUnits(){
+  document.querySelectorAll("#unitTabs button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.u===UNITS));
+  document.querySelectorAll("#builderPage .u-len").forEach(x=>x.textContent=uL());
+  document.querySelectorAll("#builderPage .u-wt").forEach(x=>x.textContent=uW());
+  $("pkgUnitHint").textContent=MET()?"Dimensions in centimeters, weight in kilograms":"Dimensions in inches, weight in pounds";
+  $("trkUnitHint").textContent=MET()?"A 53 ft van is about 1600 × 250 × 274 cm with a 20,400 kg payload.":"A 53 ft van is about 630 × 98.5 × 108 in with a 45,000 lb payload.";
+}
+$("unitTabs").addEventListener("click",e=>{const u=e.target.closest("button")?.dataset.u;if(!u||u===UNITS)return;
+  UNITS=u;try{localStorage.setItem(UNIT_KEY,u)}catch(err){}
+  syncGlobals();renderPkgs();renderPallets();renderUnits();if(typeof renderLib==="function")renderLib();rerender()});
 /* ---------- COMPARE BOX SIZES (single pallet) ---------- */
 const PAL_PRESETS={gma:{name:"GMA 48 × 40",L:48,W:40,H:5.5,tare:45,max:2500},p4848:{name:"48 × 48",L:48,W:48,H:5.5,tare:50,max:2500},
   p4842:{name:"48 × 42",L:48,W:42,H:5.5,tare:45,max:2500},p4242:{name:"42 × 42",L:42,W:42,H:5.5,tare:40,max:2500},
