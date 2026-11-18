@@ -85,6 +85,7 @@ td.n{font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-num
 .pill{display:inline-block;font-size:.7rem;font-weight:600;padding:1px 7px;border-radius:999px;background:var(--soft);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 .pill.mix{background:var(--accent);color:var(--accent-ink)}
 .pill.warn{background:var(--warn);color:#fff}
+tr.inactive td{color:var(--muted)}
 .alert{border-left:4px solid var(--warn);background:var(--soft);padding:8px 12px;border-radius:0 4px 4px 0;font-size:.85rem}
 .truckwrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--truck-floor);padding:10px}
 .truckwrap svg{min-width:640px}
@@ -193,7 +194,7 @@ th.opt{text-align:right}
   <div class="logo-bar"><img src="assets/hat-logo.png" alt="HAT Human Active Technology" class="logo" width="640" height="313"></div>
   <div class="brand"><h1>Ti:Hi Shipment Builder</h1></div>
   <section class="panel">
-    <h2>Almost there</h2>
+    <h2 id="pendingTitle">Almost there</h2>
     <p id="pendingText"></p>
     <div class="hdr-actions"><button type="button" id="pendingCheck" class="primary">Check again</button><button type="button" id="pendingOut">Sign out</button></div>
   </section>
@@ -210,9 +211,9 @@ th.opt{text-align:right}
     <div class="row r2"><label for="userSearch">Search users<input id="userSearch" type="search" placeholder="Name, email or company"></label>
       <label for="userCompany">Company<select id="userCompany"><option value="">All companies</option></select></label></div>
     <p id="userCount" class="hint"></p>
-    <p class="hint">Admins manage roles and see every page. Packaging engineers also see Compare box sizes, Shipping Comparison and Box finder. Users see the Shipment builder only.</p>
+    <p class="hint">Admins manage roles and see every page. Packaging engineers also see Compare box sizes, Shipping Comparison and Box finder. Users see the Shipment builder only. Deactivating an account blocks it from signing in or using the app and keeps everything it saved.</p>
     <p id="roleMsg" class="hint" role="status" hidden></p>
-    <div class="tablewrap"><table><thead><tr><th>Username</th><th>Email</th><th>Company</th><th>Role</th><th>Joined</th></tr></thead><tbody id="userRows"></tbody></table></div>
+    <div class="tablewrap"><table><thead><tr><th>Username</th><th>Email</th><th>Company</th><th>Role</th><th>Joined</th><th>Account</th></tr></thead><tbody id="userRows"></tbody></table></div>
   </div>
 </section>
 <nav class="tabs pagenav" aria-label="Pages" hidden>
@@ -1636,12 +1637,17 @@ async function route(){
   routing=(async()=>{
     const {data:{session}}=await sb.auth.getSession();
     if(!session){PROFILE=null;IS_ADMIN=false;applyRole();show("auth");return}
-    const {data:prof,error}=await sb.from("profiles").select("id,username,email,role,company_id,companies(name,status,email_domain)").eq("id",session.user.id).maybeSingle();
+    const {data:prof,error}=await sb.from("profiles").select("*,companies(name,status,email_domain)").eq("id",session.user.id).maybeSingle();
     if(error||!prof){show("auth");authMsg("We couldn't find your account details. Try signing in again, or create an account.","err");await sb.auth.signOut();return}
     PROFILE=prof;
     const {data:adm}=await sb.from("app_admins").select("user_id").eq("user_id",prof.id).maybeSingle();
     IS_ADMIN=!!adm;
     const c=prof.companies||{};
+    if(prof.active===false){
+      $("pendingTitle").textContent="Account deactivated";
+      $("pendingText").textContent="Your Ti:Hi Shipment Builder account has been deactivated. Contact your company's admin if you need it turned back on.";
+      show("pending");return}
+    $("pendingTitle").textContent="Almost there";
     if(c.status!=="approved"&&!IS_ADMIN){
       $("pendingText").textContent=c.status==="rejected"
         ?`${c.name} (${c.email_domain}) wasn't approved for Ti:Hi Shipment Builder. Contact the site admin if you think this is a mistake.`
@@ -1655,8 +1661,8 @@ async function route(){
 }
 let USERS=[];
 async function loadUsers(){
-  const {data,error}=await sb.from("profiles").select("id,username,email,role,created_at,company_id,companies(name,email_domain,status)").order("created_at",{ascending:false});
-  if(error){$("userRows").innerHTML=`<tr><td colspan="5">Couldn't load users.</td></tr>`;return}
+  const {data,error}=await sb.from("profiles").select("*,companies(name,email_domain,status)").order("created_at",{ascending:false});
+  if(error){$("userRows").innerHTML=`<tr><td colspan="6">Couldn't load users.</td></tr>`;return}
   USERS=data;
   const cos=[...new Map(data.map(u=>[u.company_id,u.companies?u.companies.name:"?"])).entries()].sort((a,b)=>a[1].localeCompare(b[1]));
   const sel=$("userCompany"),keep=sel.value;
@@ -1667,11 +1673,12 @@ async function loadUsers(){
 function renderUsers(){
   const q=$("userSearch").value.trim().toLowerCase(),co=$("userCompany").value;
   const list=USERS.filter(u=>(!co||u.company_id===co)&&(!q||[u.username,u.email,u.companies&&u.companies.name].join(" ").toLowerCase().includes(q)));
-  $("userCount").textContent=`${list.length} of ${USERS.length} user${USERS.length===1?"":"s"}`;
-  $("userRows").innerHTML=list.length?list.map(u=>`<tr><td>${esc(u.username)}</td><td class="mono">${esc(u.email)}</td>
+  const off=USERS.filter(u=>u.active===false).length;
+  $("userCount").textContent=`${list.length} of ${USERS.length} user${USERS.length===1?"":"s"}`+(off?` · ${off} deactivated`:"");
+  $("userRows").innerHTML=list.length?list.map(u=>`<tr${u.active===false?' class="inactive"':""}><td>${esc(u.username)}</td><td class="mono">${esc(u.email)}</td>
     <td>${esc(u.companies?u.companies.name:"")} ${u.companies&&u.companies.status!=="approved"?`<span class="pill${u.companies.status==="rejected"?" warn":" mix"}">${u.companies.status}</span>`:""}</td>
-    <td>${roleCell(u)}</td><td class="mono">${new Date(u.created_at).toLocaleDateString()}</td></tr>`).join("")
-    :`<tr><td colspan="5" class="hint">No users match.</td></tr>`;
+    <td>${roleCell(u)}</td><td class="mono">${new Date(u.created_at).toLocaleDateString()}</td><td>${activeCell(u)}</td></tr>`).join("")
+    :`<tr><td colspan="6" class="hint">No users match.</td></tr>`;
 }
 /* Roles: User (member) sees the Shipment builder; Packaging engineer (engineer) also sees
    Compare box sizes, Shipping Comparison and Box finder; Admin (company_admin) sees everything and sets roles.
@@ -1684,6 +1691,14 @@ function roleCell(u){
   const editable=canManage()&&u.id!==PROFILE.id&&(IS_ADMIN||u.company_id===PROFILE.company_id);
   if(!editable)return esc(roleName(u.role));
   return `<select data-role-uid="${u.id}" aria-label="Role for ${esc(u.username)}">${ROLES.map(([v,l])=>`<option value="${v}"${v===u.role?" selected":""}>${l}</option>`).join("")}</select>`;
+}
+/* Deactivate / Reactivate: enforced in the database (set_user_active, supabase/deactivate-users.sql).
+   Same rules as roles: company Admins for their own company, site admins for everyone, never yourself. */
+function activeCell(u){
+  const on=u.active!==false,pill=on?"":`<span class="pill warn">Deactivated</span> `;
+  const editable=canManage()&&u.id!==PROFILE.id&&(IS_ADMIN||u.company_id===PROFILE.company_id)&&("active" in u);
+  if(!editable)return on?`<span class="hint">Active</span>`:pill;
+  return pill+`<button type="button" data-active-uid="${u.id}" data-make="${on?"0":"1"}">${on?"Deactivate":"Reactivate"}</button>`;
 }
 function roleMsg(t,kind){const m=$("roleMsg");m.textContent=t||"";m.hidden=!t;m.className=kind?"msg "+kind:"hint"}
 function adminTab(t){$("admTabCo").setAttribute("aria-pressed",t==="co");$("admTabUsers").setAttribute("aria-pressed",t==="users");
@@ -1711,7 +1726,7 @@ if(!sb){
     if(!email||!password){authMsg("Enter your email and password.","err");return}
     authMsg("Signing in...");
     const {error}=await sb.auth.signInWithPassword({email,password});
-    if(error){authMsg(/confirm/i.test(error.message)?"Your email isn't verified yet. Click the link we emailed you, then sign in.":"That email and password don't match an account.","err");return}
+    if(error){authMsg(/confirm/i.test(error.message)?"Your email isn't verified yet. Click the link we emailed you, then sign in.":/banned/i.test(error.message)?"This account has been deactivated. Contact your company's admin if you need it turned back on.":"That email and password don't match an account.","err");return}
     authMsg("");route();
   });
   $("forgotBtn").addEventListener("click",async()=>{
@@ -1753,6 +1768,13 @@ if(!sb){
     if(error){roleMsg("Couldn't change the role: "+error.message,"err");e.target.value=u?u.role:nr}
     else{if(u)u.role=nr;roleMsg(`${u?u.username:"User"} is now ${roleName(nr)==="Admin"?"an":"a"} ${roleName(nr)}.`,"ok")}
     e.target.disabled=false});
+  $("userRows").addEventListener("click",async e=>{const b=e.target.closest("[data-active-uid]");if(!b)return;
+    const uid=b.dataset.activeUid,make=b.dataset.make==="1",u=USERS.find(x=>x.id===uid),name=u?u.username:"this user";
+    if(!make&&!confirm(`Deactivate ${name}? They won't be able to sign in or use the app. Their saved work stays, and you can reactivate them any time.`))return;
+    b.disabled=true;
+    const {error}=await sb.rpc("set_user_active",{uid,make_active:make});
+    if(error){roleMsg(`Couldn't ${make?"reactivate":"deactivate"} ${name}: `+error.message,"err");b.disabled=false;return}
+    if(u)u.active=make;renderUsers();roleMsg(`${name} is ${make?"active again":"deactivated"}.`,"ok")});
   $("admTabCo").addEventListener("click",()=>adminTab("co"));
   $("admTabUsers").addEventListener("click",()=>adminTab("users"));
   $("userSearch").addEventListener("input",renderUsers);
