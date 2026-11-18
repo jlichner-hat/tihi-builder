@@ -229,7 +229,7 @@ th.opt{text-align:right}
     <p class="sub">Enter your item sizes, pick pallets and a stack height, and get items per layer (Ti), layers per pallet (Hi), a picture and spec sheet for every finished pallet, and a trailer or container floor plan.</p>
   </div>
   <div class="hdr-actions"><div class="tabs" id="unitTabs" role="group" aria-label="Units for entering sizes and weights">
-      <button type="button" data-u="imperial" aria-pressed="true">Inches · lb</button><button type="button" data-u="metric" aria-pressed="false">Metric · cm · kg</button></div>
+      <button type="button" data-u="imperial" aria-pressed="true">Inches · lb</button><button type="button" data-u="metric" aria-pressed="false">Metric · mm · kg</button></div>
     <button id="resetBtn" type="button">Load example data</button>
     <button id="pdfPrint" type="button">Print report</button>
     <button id="pdfBtn" class="primary" type="button">Download PDF report</button></div>
@@ -614,17 +614,18 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",
 /* ---------- UNITS (Shipment builder) ----------
    Every calculation runs in inches and pounds, exactly as before. Metric only changes what is typed
    and shown on this page and its PDF: inputs are converted to inches/pounds as they are entered. */
-const CM=2.54,KG=0.45359237,UNIT_KEY="tihi.units";
+const MM=25.4,KG=0.45359237,UNIT_KEY="tihi.units";
 let UNITS=(()=>{try{return localStorage.getItem(UNIT_KEY)==="metric"?"metric":"imperial"}catch(e){return "imperial"}})();
 const MET=()=>UNITS==="metric";
-const uL=()=>MET()?"cm":"in", uW=()=>MET()?"kg":"lb";
-const toL=v=>MET()?v*CM:v, toW=v=>MET()?v*KG:v;          // stored (in, lb) -> shown
-const fromL=v=>MET()?v/CM:v, fromW=v=>MET()?v/KG:v;      // typed -> stored (in, lb)
-const vL=v=>+(+toL(+v)).toFixed(MET()?2:3), vW=v=>+(+toW(+v)).toFixed(MET()?2:3); // input box values
-const fL=(v,d=1)=>`${fmt(toL(v),d)} ${uL()}`, fW=(v,d=0)=>`${fmt(toW(v),d)} ${uW()}`;
-const fLong=(v,d=1)=>MET()?`${fmt(v*CM/100,d)} m`:`${fmt(v/12,d)} ft`;   // truck lengths
-const fCube=v=>MET()?`${fmt(v*Math.pow(CM/100,3),2)} m³`:`${fmt(v/1728,1)} ft³`;
-const fDims=(a,d=1,sep=" × ")=>a.map(x=>fmt(toL(x),d)).join(sep)+" "+uL();
+const uL=()=>MET()?"mm":"in", uW=()=>MET()?"kg":"lb";
+const toL=v=>MET()?v*MM:v, toW=v=>MET()?v*KG:v;          // stored (in, lb) -> shown
+const fromL=v=>MET()?v/MM:v, fromW=v=>MET()?v/KG:v;      // typed -> stored (in, lb)
+const vL=v=>+(+toL(+v)).toFixed(MET()?1:3), vW=v=>+(+toW(+v)).toFixed(MET()?2:3); // input box values
+const fmtL=(v,d=1)=>fmt(toL(v),MET()?0:d); // mm shown as whole numbers
+const fL=(v,d=1)=>`${fmtL(v,d)} ${uL()}`, fW=(v,d=0)=>`${fmt(toW(v),d)} ${uW()}`;
+const fLong=(v,d=1)=>MET()?`${fmt(v*MM/1000,d)} m`:`${fmt(v/12,d)} ft`;   // truck lengths
+const fCube=v=>MET()?`${fmt(v*Math.pow(MM/1000,3),2)} m³`:`${fmt(v/1728,1)} ft³`;
+const fDims=(a,d=1,sep=" × ")=>a.map(x=>fmtL(x,d)).join(sep)+" "+uL();
 
 /* ---------- LAYER PATTERN (Ti) ----------
    Recursive guillotine block search: fill a rectangle with blocks of the box in either
@@ -824,7 +825,7 @@ function loadTruck(built){
 /* ---------- RENDER: inputs ---------- */
 function palletOptions(sel,withAuto){
   return (withAuto?`<option value="auto"${sel==="auto"?" selected":""}>Auto (best fit)</option>`:"")+
-    state.pallets.map(p=>`<option value="${p.id}"${sel===p.id?" selected":""}>${esc(p.name)} (${fmt(toL(p.L),1)}×${fmt(toL(p.W),1)}${MET()?" cm":""})</option>`).join("");
+    state.pallets.map(p=>`<option value="${p.id}"${sel===p.id?" selected":""}>${esc(p.name)} (${fmtL(p.L,1)}×${fmtL(p.W,1)}${MET()?" mm":""})</option>`).join("");
 }
 function renderPkgs(){
   $("pkgList").innerHTML=state.packages.map((p,i)=>`
@@ -943,7 +944,7 @@ function truckSVG(T,t,ti){
   // length scale
   const sy=top+T.W+14;
   s+=`<line x1="${pad}" x2="${pad+T.L}" y1="${sy}" y2="${sy}" stroke="var(--muted)"/>`;
-  const met=MET(),step=met?100/CM:12*5,lab=2; // tick every 1 m or 5 ft, label every other tick
+  const met=MET(),step=met?1000/MM:12*5,lab=2; // tick every 1 m or 5 ft, label every other tick
   for(let k=0;k*step<=T.L+1e-6;k++){const x=pad+k*step;s+=`<line x1="${x}" x2="${x}" y1="${sy-3}" y2="${sy+3}" stroke="var(--muted)"/>`;
     if(k%lab===0)s+=`<text x="${x}" y="${sy+14}" font-size="9" text-anchor="middle" fill="var(--muted)" font-family="var(--f-mono)">${met?k+" m":k*5+" ft"}</text>`}
   return `<svg viewBox="0 0 ${vbW} ${vbH+6}" role="img" aria-label="Truck ${ti+1} floor plan">${s}</svg>`;
@@ -985,7 +986,7 @@ function renderResults(){
       <div class="figs"><figure>${layerSVG(res,s.idx)}<figcaption>Layer, top view</figcaption></figure>
         <figure>${sideSVG(fullP,maxH)}<figcaption>Side view · red = max height</figcaption></figure></div>
       <dl class="kv">
-        <dt>Placed as</dt><dd>${fmt(toL(res.l),1)}×${fmt(toL(res.w),1)} footprint, ${fL(res.h)} up</dd>
+        <dt>Placed as</dt><dd>${fmtL(res.l,1)}×${fmtL(res.w,1)} footprint, ${fL(res.h)} up</dd>
         <dt>Layer coverage</dt><dd>${fmt(eff,1)}%</dd>
         <dt>Pallet height</dt><dd>${fL(res.pallet.H+res.hi*res.h)}</dd>
         <dt>Pallet weight</dt><dd>${fW(res.cases*s.wt+res.pallet.tare)}</dd>
@@ -1054,7 +1055,7 @@ function renderResults(){
     const pill=b.type==="full"?'<span class="pill">Full</span>':b.type==="mixed"?'<span class="pill mix">Mixed</span>':'<span class="pill">Partial</span>';
     const ids=n>1?`P${b.id}–P${r.list[n-1].id}`:`P${b.id}`;
     const tr=[...new Set(r.list.map(x=>loc.get(x.id)).filter(Boolean))].map(t=>"T"+t).join(", ");
-    h+=`<tr><td class="mono">${ids}</td><td class="n">${n}</td><td>${pill}</td><td>${esc(b.pallet.name)}</td><td>${contents}</td><td class="n">${b.layers.length}</td><td class="n">${b.cases}</td><td class="n">${fmt(toL(b.height),1)}</td><td class="n">${fmt(toW(b.weight))}</td><td class="mono">${tr||"–"}</td></tr>`;
+    h+=`<tr><td class="mono">${ids}</td><td class="n">${n}</td><td>${pill}</td><td>${esc(b.pallet.name)}</td><td>${contents}</td><td class="n">${b.layers.length}</td><td class="n">${b.cases}</td><td class="n">${fmtL(b.height,1)}</td><td class="n">${fmt(toW(b.weight))}</td><td class="mono">${tr||"–"}</td></tr>`;
   }
   h+=`</tbody></table></div>`;
   h+=`<p class="hint">Mixed pallets put the heaviest items on the bottom: full layers go heaviest item first, then partial layers on top, also heaviest first. Partial layers are shown at their share of the pallet length.</p></section>`;
@@ -1138,7 +1139,7 @@ async function buildPdf(){
   doc.autoTable({startY:y,margin:{left:M,right:M},theme:"grid",styles:{fontSize:8.5,cellPadding:4,textColor:ink,lineColor:[211,216,222]},
     headStyles:{fillColor:[29,35,43],textColor:255,fontStyle:"bold"},
     head:[["Item",`L x W x H ${uL()}`,`Wt ${uW()}`,"Qty","Pallet","Ti","Hi","Per pallet","Full","Left over"]],
-    body:R.skus.map(r=>{const s=r.sku,x=r.res;return [s.name,[s.L,s.W,s.H].map(v=>fmt(toL(v),MET()?1:2)).join(" x "),fmt(toW(s.wt),1),fmt(s.qty),x?x.pallet.name:"-",x?x.ti:"-",x?x.hi:"-",x?x.cases:"-",r.mixAll?"-":r.full,r.mixAll?"mixed":fmt(r.rem)]}),
+    body:R.skus.map(r=>{const s=r.sku,x=r.res;return [s.name,[s.L,s.W,s.H].map(v=>fmtL(v,2)).join(" x "),fmt(toW(s.wt),1),fmt(s.qty),x?x.pallet.name:"-",x?x.ti:"-",x?x.hi:"-",x?x.cases:"-",r.mixAll?"-":r.full,r.mixAll?"mixed":fmt(r.rem)]}),
     columnStyles:{2:{halign:"right"},3:{halign:"right"},5:{halign:"right"},6:{halign:"right"},7:{halign:"right"},8:{halign:"right"},9:{halign:"right"}}});
   y=doc.lastAutoTable.finalY+16;
   // Layer patterns, 3 per row
@@ -1152,7 +1153,7 @@ async function buildPdf(){
       doc.setFillColor(...c);doc.rect(x,y,8,8,"F");doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(...ink);doc.text(r.sku.name,x+12,y+7.5);
       doc.addImage(imgs[j].data,"PNG",x,y+14,lw,lw*imgs[j].ratio);
       const yy=y+20+ih;doc.setFontSize(12);doc.text(`${r.res.ti}:${r.res.hi} = ${r.res.cases}`,x,yy+6);
-      kv(x,yy+20,lw,[["Placed as",`${fmt(toL(r.res.l),1)}x${fmt(toL(r.res.w),1)}, ${fL(r.res.h)} up`],["Limited by",r.res.limitedBy]])});
+      kv(x,yy+20,lw,[["Placed as",`${fmtL(r.res.l,1)}x${fmtL(r.res.w,1)}, ${fL(r.res.h)} up`],["Limited by",r.res.limitedBy]])});
     y+=ih+70;
   }
   // Finished pallets, 2 per row
@@ -1197,7 +1198,7 @@ async function buildPdf(){
     headStyles:{fillColor:[29,35,43],textColor:255,fontStyle:"bold"},
     head:[["Pallets","Qty","Type","Base","Contents (each)","Pkgs",`Height ${uL()}`,`Weight ${uW()}`]],
     body:groups.map(g=>{const b=g.list[0],n=g.list.length;const counts=new Map();b.layers.forEach(l=>counts.set(l.sku.idx,(counts.get(l.sku.idx)||0)+l.cases));
-      return [n>1?`P${b.id}-P${g.list[n-1].id}`:`P${b.id}`,n,b.type,b.pallet.name,[...counts].map(([k,c])=>`${state.packages[k].name} x ${c}`).join(", "),b.cases,fmt(toL(b.height),1),fmt(toW(b.weight))]}),
+      return [n>1?`P${b.id}-P${g.list[n-1].id}`:`P${b.id}`,n,b.type,b.pallet.name,[...counts].map(([k,c])=>`${state.packages[k].name} x ${c}`).join(", "),b.cases,fmtL(b.height,1),fmt(toW(b.weight))]}),
     columnStyles:{1:{halign:"right"},5:{halign:"right"},6:{halign:"right"},7:{halign:"right"}}});
   pdfFooter(doc,`Ti:Hi Shipment Builder  \u00b7  ${date}`,PW,PH,M);
   return doc;
@@ -1524,7 +1525,7 @@ function renderUnits(){
   document.querySelectorAll("#builderPage .u-len").forEach(x=>x.textContent=uL());
   document.querySelectorAll("#builderPage .u-wt").forEach(x=>x.textContent=uW());
   $("pkgUnitHint").textContent=MET()?"Dimensions in centimeters, weight in kilograms":"Dimensions in inches, weight in pounds";
-  $("trkUnitHint").textContent=MET()?"A 53 ft van is about 1600 × 250 × 274 cm with a 20,400 kg payload.":"A 53 ft van is about 630 × 98.5 × 108 in with a 45,000 lb payload.";
+  $("trkUnitHint").textContent=MET()?"A 53 ft van is about 16,002 × 2,502 × 2,743 mm with a 20,400 kg payload.":"A 53 ft van is about 630 × 98.5 × 108 in with a 45,000 lb payload.";
 }
 $("unitTabs").addEventListener("click",e=>{const u=e.target.closest("button")?.dataset.u;if(!u||u===UNITS)return;
   UNITS=u;try{localStorage.setItem(UNIT_KEY,u)}catch(err){}
