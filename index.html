@@ -438,10 +438,6 @@ th.opt{text-align:right}
           <p class="hint">Finds boxes with at least this much space inside, closest first. It compares volume only, so check that the product's shape fits the box.</p>
         </div>
         <div id="bfBySize" class="col" style="gap:12px">
-        <div class="lib"><div class="lib-row">
-          <label for="bfSel">Saved items<select id="bfSel" disabled><option>Loading saved items...</option></select></label>
-          <button id="bfUse" type="button" disabled>Use size</button></div>
-          <p class="hint">Items saved on any page show up here.</p></div>
         <div class="row r3">
           <label for="bfL">Length in<input id="bfL" type="text" inputmode="decimal" autocomplete="off" placeholder="12"></label>
           <label for="bfW">Width in<input id="bfW" type="text" inputmode="decimal" autocomplete="off" placeholder="9 1/2"></label>
@@ -1560,10 +1556,10 @@ function renderLib(){
   document.querySelectorAll("#pkgList button.save").forEach(b=>b.disabled=!LIBDB);
   libPickers();
 }
-// The same saved items appear on Compare box sizes (and so Shipping Comparison), Box finder and Redwood.
+// The same saved items appear on Compare box sizes (and so Shipping Comparison) and Redwood.
 function libPickers(){
   const opts=LIB.length?LIB.map(it=>`<option value="${esc(it.id)}">${esc(it.name)}  (${it.L}×${it.W}×${it.H} in, ${it.wt} lb)</option>`).join(""):`<option value="">No saved items yet</option>`;
-  for(const [sel,btn] of [["cmpSel","cmpUse"],["bfSel","bfUse"]]){const k=$(sel).value;$(sel).innerHTML=opts;if(LIB.some(it=>it.id===k))$(sel).value=k;$(sel).disabled=$(btn).disabled=!LIB.length}
+  for(const [sel,btn] of [["cmpSel","cmpUse"]]){const k=$(sel).value;$(sel).innerHTML=opts;if(LIB.some(it=>it.id===k))$(sel).value=k;$(sel).disabled=$(btn).disabled=!LIB.length}
   rwRenderLib();
 }
 const CFG=window.TIHI_CONFIG||{};
@@ -2616,8 +2612,6 @@ function bfRun(){
 const bfN=v=>Number(v).toLocaleString(undefined,{maximumFractionDigits:3});
 const bfDims=b=>[b.L,b.W,b.H].map(bfN).join(" × ");
 $("bfForm").addEventListener("submit",e=>{e.preventDefault();bfRun()});
-$("bfUse").addEventListener("click",()=>{const it=LIB.find(x=>x.id===$("bfSel").value);if(!it)return;
-  $("bfL").value=it.L;$("bfW").value=it.W;$("bfH").value=it.H;bfRun()});
 ["bfL","bfW","bfH","bfPad"].forEach(id=>$(id).addEventListener("input",bfRun));
 ["bfUp","bfCount"].forEach(id=>$(id).addEventListener("change",bfRun));
 $("bfReload").addEventListener("click",bfInit);
