@@ -2386,6 +2386,10 @@ function bfColumns(head){
                x=>x.includes("name")||x.includes("sku")||x.includes("part")||x.includes("item"),x=>x.includes("desc"));
   return {L,W,H,D,N};
 }
+// The sheet's Board column is the board thickness in inches; show it as the flute name.
+const BF_FLUTES=[[0.0625,"E-Flute"],[0.125,"B-Flute"],[0.1875,"C-Flute"],[0.3125,"BC-Flute"]];
+function bfFlute(v){const n=parseDim(v);if(!(n>0))return v;
+  const f=BF_FLUTES.find(([t])=>Math.abs(n-t)<0.002);return f?f[1]:v}
 const BF_DIMKEY=/^(l|w|h|d|ht|len|wid|length|width|height|depth)$/;
 // Parses a box list into {rows, extra}; throws with a readable message when it can't.
 function bfParseCsv(text){
@@ -2423,7 +2427,7 @@ function bfParseCsv(text){
     else{const parts=String(r[c.D]||"").split(/\s*[x×X*]\s*/);d=parts.length===3?parts.map(parseDim):[NaN]}
     if(d.length!==3||d.some(v=>!(v>0)))return;
     const name=(c.N>=0?r[c.N]:"").trim()||`Row ${hi+n+2}`;
-    const ex=extra.map(x=>(r[x.i]||"").trim());
+    const ex=extra.map(x=>{const v=(r[x.i]||"").trim();return /^(board|flute|boardthickness|wall)$/.test(bfKey(x.h))?bfFlute(v):v});
     if(oc){const od=[r[oc.L],r[oc.W],r[oc.H]].map(parseDim);ex.push(od.every(v=>v>0)?od.map(bfN).join(" × ")+" in":"")}
     const url=U>=0&&/^https:\/\//i.test((r[U]||"").trim())?r[U].trim():"";
     const stocked=S>=0?/^(y|yes|true|x|1|stocked|in stock)$/i.test((r[S]||"").trim()):false;
@@ -2576,11 +2580,11 @@ function bfRunVol(){
     bfLast.note=`No box in the list holds ${bfN(v)} ${u}.`+(big?` Largest: ${big.b.name} (${bfDims(big.b)}).`:"");
     h+=`<div class="alert">No box in the list holds ${bfN(v)} ${u}.</div>`;
     if(big)h+=`<p class="hint">Largest: ${esc(big.b.name)} (${bfDims(big.b)}, ${fmt(big.vol/k,d)} ${u}).</p>`;
-    box.innerHTML=h+`</section>`+bfStockedSection(fits,count,()=>[]);return}
+    box.innerHTML=bfStockedSection(fits,count,()=>[])+h+`</section>`;return}
   const rowsFor=x=>[["Inside volume",`${fmt(x.vol/k,d)} ${u}`],["Extra volume",`${fmt((x.vol-need)/k,d)} ${u}`],["Filled",`${fmt(100*need/x.vol,0)}%`]];
   h+=`<div class="cards">`+fits.slice(0,count).map((x,i)=>bfCard(x,i,rowsFor(x))).join("")+`</div>`;
   h+=`<p class="hint">Sorted smallest box first. Inside volume is worked out from the inside length, width and height, so it can differ from the sheet's Cubic volume column.</p></section>`;
-  box.innerHTML=h+bfStockedSection(fits,count,rowsFor);
+  box.innerHTML=bfStockedSection(fits,count,rowsFor)+h;
 }
 // Smallest whole-inch box that holds the product: a starting point for a Uline size search.
 function bfUlinePanel(need,up,best,pVol){
@@ -2622,14 +2626,14 @@ function bfRun(){
     h+=`<div class="alert">No box in the list is big enough${up?" with the height kept up":""}.</div>`;
     bfLast.note=`No box in stock is big enough${up?" with the height kept up":""}.`+(near.length?` Nearest: ${near.map(x=>`${x.b.name} (${bfDims(x.b)}, short ${bfN(x.short)} in)`).join("; ")}.`:"");
     if(near.length)h+=`<p class="hint">Nearest: ${near.map(x=>`${esc(x.b.name)} (${bfDims(x.b)}, short by ${bfN(x.short)} in)`).join("; ")}.</p>`;
-    box.innerHTML=h+`</section>`+bfStockedSection(fits,count,()=>[])+bfUlineSection(need,up,null,pVol,pad,count);return}
+    box.innerHTML=bfStockedSection(fits,count,()=>[])+h+`</section>`+bfUlineSection(need,up,null,pVol,pad,count);return}
   const rowsFor=x=>[
     ["Product sits as",x.f.q.map(v=>bfN(v-2*pad)).join(" × ")],
     ["Extra room L / W / H",`${x.f.room.map(bfN).join(" / ")} in`],
     ["Empty space",`${fmt(100*(1-pVol/x.vol),0)}%`]];
   h+=`<div class="cards">`+top.map((x,i)=>bfCard(x,i,rowsFor(x))).join("")+`</div>`;
   h+=`<p class="hint">Sorted smallest box first. Extra room is the space left over in each direction${pad?", after the padding you asked for":""}. Empty space is how much of the box the product doesn't fill.</p></section>`;
-  box.innerHTML=h+bfStockedSection(fits,count,rowsFor)+bfUlineSection(need,up,top[0],pVol,pad,count);
+  box.innerHTML=bfStockedSection(fits,count,rowsFor)+h+bfUlineSection(need,up,top[0],pVol,pad,count);
 }
 const bfN=v=>Number(v).toLocaleString(undefined,{maximumFractionDigits:3});
 const bfDims=b=>[b.L,b.W,b.H].map(bfN).join(" × ");
@@ -2704,8 +2708,8 @@ h2 small{font:400 .7em "IBM Plex Sans",Arial,sans-serif;text-transform:none;lett
   <div class="tape"></div>
   <div class="req"><i>Requested size</i><b>${e(r.search)}</b><div class="c">${fmt(r.fitCount)} of ${fmt(r.total)} boxes in stock fit</div></div>
   ${r.note?`<p class="note">${e(r.note)}</p>`:""}
-  ${list(r.stock,"Closest boxes in stock","smallest first")}
   ${list(r.stocked,e(r.stockTitle||"Stocked at HAT"),"smallest first")}
+  ${list(r.stock,"Closest boxes in stock","smallest first")}
   ${list(r.uline,"Uline boxes","inside dims · not set up in SyteLine")}
 </div></div>
 <script>
