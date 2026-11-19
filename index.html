@@ -2349,7 +2349,7 @@ Sample 17,20,20,20,Sample list
 Sample 18,24,18,12,Sample list
 Sample 19,24,24,24,Sample list`;
 const BF_KEY="tihi.boxCsvUrl";
-const bf={rows:[],extra:[],source:"",nameCol:""};
+const bf={rows:[],extra:[],source:"",nameCol:"",stockCol:""};
 const lsGet=k=>{try{return localStorage.getItem(k)||""}catch(e){return ""}};
 const lsSet=(k,v)=>{try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}};
 
@@ -2403,10 +2403,18 @@ function bfParseCsv(text){
   // The first Length/Width/Height set is the inside size. A later set grouped as "outside"
   // (not metric) is shown as the outside size; other repeated dimension columns are hidden.
   const dimCols=head.map((h,i)=>i).filter(i=>BF_DIMKEY.test(bfKey(head[i])));
-  const outCols=dimCols.filter(i=>/outside|exterior|outer|\bod\b/.test(group[i])&&!/metric|mm|cm/.test(group[i]));
+  // Dimension columns come in sets of three. A set whose own group cells say "outside" (a label centered
+  // over the middle column counts too) is the outside size; otherwise fall back to labels carried right.
+  const isOut=t=>/outside|exterior|outer|\bod\b/.test(t)&&!/metric|mm|cm/.test(t);
+  const above=i=>hi>0?(rows[hi-1][i]||"").trim().toLowerCase():"";
+  let outCols=[];
+  for(let j=3;j+2<dimCols.length&&!outCols.length;j+=3){const set=dimCols.slice(j,j+3);if(isOut(set.map(above).join(" ")))outCols=set}
+  if(!outCols.length)outCols=dimCols.filter(i=>isOut(group[i]));
   const oc=outCols.length>=3?bfColumns(head.map((h,i)=>outCols.includes(i)?h:"")):null;
   const U=head.findIndex(h=>/^(link|url|productlink|weblink)$/.test(bfKey(h)));
-  const used=new Set([c.L,c.W,c.H,c.D,c.N,U,...dimCols].filter(i=>i>=0));
+  // A yes/no column saying the box is one HAT carries in inventory, e.g. "Stocked at HAT" (not "Safety Stock").
+  const S=head.findIndex(h=>/^(stocked|instock|stockitem|stockeditem|carried|carry|wecarry|ininventory|inventoryitem|keptinstock)/.test(bfKey(h))||/^(stock|inventory)$/.test(bfKey(h)));
+  const used=new Set([c.L,c.W,c.H,c.D,c.N,U,S,...dimCols].filter(i=>i>=0));
   const extra=head.map((h,i)=>({h,i})).filter(x=>x.h&&!used.has(x.i));
   const out=[];
   rows.slice(hi+1).forEach((r,n)=>{
@@ -2418,13 +2426,14 @@ function bfParseCsv(text){
     const ex=extra.map(x=>(r[x.i]||"").trim());
     if(oc){const od=[r[oc.L],r[oc.W],r[oc.H]].map(parseDim);ex.push(od.every(v=>v>0)?od.map(bfN).join(" × ")+" in":"")}
     const url=U>=0&&/^https:\/\//i.test((r[U]||"").trim())?r[U].trim():"";
-    out.push({name,L:d[0],W:d[1],H:d[2],extra:ex,url});
+    const stocked=S>=0?/^(y|yes|true|x|1|stocked|in stock)$/i.test((r[S]||"").trim()):false;
+    out.push({name,L:d[0],W:d[1],H:d[2],extra:ex,url,stocked});
   });
   if(!out.length)throw new Error("No rows with three box dimensions were found.");
-  return {rows:out,extra:extra.map(x=>x.h).concat(oc?["Outside size"]:[])};
+  return {rows:out,extra:extra.map(x=>x.h).concat(oc?["Outside size"]:[]),stockCol:S>=0?head[S]:""};
 }
 function bfLoadCsv(text,source){
-  const p=bfParseCsv(text);bf.rows=p.rows;bf.extra=p.extra;bf.source=source;
+  const p=bfParseCsv(text);bf.rows=p.rows;bf.extra=p.extra;bf.source=source;bf.stockCol=p.stockCol;
   return p.rows.length;
 }
 // Uline's standard 200 lb test boxes (uline-boxes.csv in this repo), searched next to stock.
@@ -2517,6 +2526,18 @@ function bfCard(x,i,rows,src=bf,pill){
       <dl class="kv">${rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join("")}
       ${src.extra.map((e,j)=>x.b.extra[j]?`<dt>${esc(e)}</dt><dd>${esc(x.b.extra[j])}</dd>`:"").join("")}</dl></div>`;
 }
+/* Boxes the sheet's yes/no column (e.g. "Stocked at HAT") marks as carried in inventory, closest first.
+   Shown just above the Uline boxes; nothing is shown when the sheet has no such column. */
+function bfStockedSection(fits,count,rowsFor){
+  if(!bf.stockCol){bfLast.stocked=null;return ""}
+  const all=fits.filter(x=>x.b.stocked),top=all.slice(0,count),title=esc(bf.stockCol);
+  bfLast.stocked=top.map(x=>({name:x.b.name,dims:bfDims(x.b)}));bfLast.stockTitle=bf.stockCol;
+  let h=`<section class="panel"><div class="panel-head"><h2>${title}</h2><span class="hint">${fmt(all.length)} of ${fmt(bf.rows.filter(b=>b.stocked).length)} stocked boxes fit</span></div>`;
+  if(!top.length)return h+`<p class="hint">None of the boxes marked Yes in the ${title} column is big enough.</p></section>`;
+  h+=`<p class="hint">Boxes marked Yes in the sheet's ${title} column, smallest first.</p>`;
+  h+=`<div class="cards">`+top.map((x,i)=>bfCard(x,i,rowsFor(x),bf,i===0?`<span class="pill mix">Best stocked</span>`:`<span class="pill">#${i+1}</span>`)).join("")+`</div></section>`;
+  return h;
+}
 // Closest Uline boxes for the product, compared with the best stock box.
 function bfUlineSection(need,up,best,pVol,pad,count){
   if(ul.state==="idle"||ul.state==="loading")return `<section class="panel"><div class="panel-head"><h2>Uline boxes</h2></div><p class="hint">Loading the Uline size list...</p></section>`;
@@ -2555,11 +2576,11 @@ function bfRunVol(){
     bfLast.note=`No box in the list holds ${bfN(v)} ${u}.`+(big?` Largest: ${big.b.name} (${bfDims(big.b)}).`:"");
     h+=`<div class="alert">No box in the list holds ${bfN(v)} ${u}.</div>`;
     if(big)h+=`<p class="hint">Largest: ${esc(big.b.name)} (${bfDims(big.b)}, ${fmt(big.vol/k,d)} ${u}).</p>`;
-    box.innerHTML=h+`</section>`;return}
-  h+=`<div class="cards">`+fits.slice(0,count).map((x,i)=>bfCard(x,i,[
-    ["Inside volume",`${fmt(x.vol/k,d)} ${u}`],["Extra volume",`${fmt((x.vol-need)/k,d)} ${u}`],["Filled",`${fmt(100*need/x.vol,0)}%`]])).join("")+`</div>`;
+    box.innerHTML=h+`</section>`+bfStockedSection(fits,count,()=>[]);return}
+  const rowsFor=x=>[["Inside volume",`${fmt(x.vol/k,d)} ${u}`],["Extra volume",`${fmt((x.vol-need)/k,d)} ${u}`],["Filled",`${fmt(100*need/x.vol,0)}%`]];
+  h+=`<div class="cards">`+fits.slice(0,count).map((x,i)=>bfCard(x,i,rowsFor(x))).join("")+`</div>`;
   h+=`<p class="hint">Sorted smallest box first. Inside volume is worked out from the inside length, width and height, so it can differ from the sheet's Cubic volume column.</p></section>`;
-  box.innerHTML=h;
+  box.innerHTML=h+bfStockedSection(fits,count,rowsFor);
 }
 // Smallest whole-inch box that holds the product: a starting point for a Uline size search.
 function bfUlinePanel(need,up,best,pVol){
@@ -2601,13 +2622,14 @@ function bfRun(){
     h+=`<div class="alert">No box in the list is big enough${up?" with the height kept up":""}.</div>`;
     bfLast.note=`No box in stock is big enough${up?" with the height kept up":""}.`+(near.length?` Nearest: ${near.map(x=>`${x.b.name} (${bfDims(x.b)}, short ${bfN(x.short)} in)`).join("; ")}.`:"");
     if(near.length)h+=`<p class="hint">Nearest: ${near.map(x=>`${esc(x.b.name)} (${bfDims(x.b)}, short by ${bfN(x.short)} in)`).join("; ")}.</p>`;
-    box.innerHTML=h+`</section>`+bfUlineSection(need,up,null,pVol,pad,count);return}
-  h+=`<div class="cards">`+top.map((x,i)=>bfCard(x,i,[
+    box.innerHTML=h+`</section>`+bfStockedSection(fits,count,()=>[])+bfUlineSection(need,up,null,pVol,pad,count);return}
+  const rowsFor=x=>[
     ["Product sits as",x.f.q.map(v=>bfN(v-2*pad)).join(" × ")],
     ["Extra room L / W / H",`${x.f.room.map(bfN).join(" / ")} in`],
-    ["Empty space",`${fmt(100*(1-pVol/x.vol),0)}%`]])).join("")+`</div>`;
+    ["Empty space",`${fmt(100*(1-pVol/x.vol),0)}%`]];
+  h+=`<div class="cards">`+top.map((x,i)=>bfCard(x,i,rowsFor(x))).join("")+`</div>`;
   h+=`<p class="hint">Sorted smallest box first. Extra room is the space left over in each direction${pad?", after the padding you asked for":""}. Empty space is how much of the box the product doesn't fill.</p></section>`;
-  box.innerHTML=h+bfUlineSection(need,up,top[0],pVol,pad,count);
+  box.innerHTML=h+bfStockedSection(fits,count,rowsFor)+bfUlineSection(need,up,top[0],pVol,pad,count);
 }
 const bfN=v=>Number(v).toLocaleString(undefined,{maximumFractionDigits:3});
 const bfDims=b=>[b.L,b.W,b.H].map(bfN).join(" × ");
@@ -2683,6 +2705,7 @@ h2 small{font:400 .7em "IBM Plex Sans",Arial,sans-serif;text-transform:none;lett
   <div class="req"><i>Requested size</i><b>${e(r.search)}</b><div class="c">${fmt(r.fitCount)} of ${fmt(r.total)} boxes in stock fit</div></div>
   ${r.note?`<p class="note">${e(r.note)}</p>`:""}
   ${list(r.stock,"Closest boxes in stock","smallest first")}
+  ${list(r.stocked,e(r.stockTitle||"Stocked at HAT"),"smallest first")}
   ${list(r.uline,"Uline boxes","inside dims · not set up in SyteLine")}
 </div></div>
 <script>
