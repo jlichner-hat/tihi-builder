@@ -1,5 +1,7 @@
 // Serves the box inventory (the Google Sheet's CSV) only to signed-in Packaging engineers,
-// Admins and site admins, and lets them add a box to the sheet (POST). The sheet's link lives in the BOX_INVENTORY_CSV_URL secret,
+// Admins and site admins, and lets them add a box to the sheet (POST). With ?stocked=1 it serves only the
+// boxes marked Yes in the sheet's "Stocked at HAT" column, and any signed-in user of an approved company
+// may read that (the Replacement Part page, which has the same access as the Shipment builder). The sheet's link lives in the BOX_INVENTORY_CSV_URL secret,
 // so it never reaches the browser or this repo.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
@@ -32,7 +34,9 @@ Deno.serve(async (req) => {
   const approved = (prof?.companies as { status?: string } | null)?.status === "approved";
   const active = prof?.active !== false; // deactivated accounts (supabase/deactivate-users.sql) are refused
   const allowed = active && (!!adm || (approved && (prof?.role === "engineer" || prof?.role === "company_admin")));
-  if (!allowed) return reply(403, "Only Packaging engineers and Admins can see the box inventory.");
+  const stockedOnly = req.method === "GET" && new URL(req.url).searchParams.get("stocked") === "1";
+  if (stockedOnly && !(active && (!!adm || approved))) return reply(403, "Your account can't see the stocked boxes.");
+  if (!stockedOnly && !allowed) return reply(403, "Only Packaging engineers and Admins can see the box inventory.");
 
   // POST adds a box to the sheet through its Apps Script web app (google/add-box.gs).
   // The script's URL and password are Supabase secrets, so they never reach the browser.
@@ -61,5 +65,41 @@ Deno.serve(async (req) => {
   if (!url) return reply(404, "The box inventory isn't connected yet.");
   const r = await fetch(url, { redirect: "follow" });
   if (!r.ok) return reply(502, `The sheet answered ${r.status}.`);
-  return reply(200, await r.text(), "text/csv; charset=utf-8");
+  const csv = await r.text();
+  return reply(200, stockedOnly ? stockedRows(csv) : csv, "text/csv; charset=utf-8");
 });
+
+// Keeps the rows above and including the header, plus the rows whose "Stocked at HAT" cell says yes.
+// The header is the first row with a stocked column (same names the site looks for in index.html).
+const STOCK_HEAD = /^(stocked|instock|stockitem|stockeditem|carried|carry|wecarry|ininventory|inventoryitem|keptinstock)/;
+const key = (h: string) => h.toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9]/g, "")
+  .replace(/^(inside|interior|internal|int|id|box)(?=[a-z])/, "").replace(/(inches|inch|in)$/, "");
+function stockedRows(text: string): string {
+  const rows = parseCsv(text);
+  let hi = -1, col = -1;
+  for (let i = 0; i < rows.length && hi < 0; i++) {
+    const k = rows[i].map((h) => key(h.trim()));
+    const c = k.findIndex((h) => STOCK_HEAD.test(h) || /^(stock|inventory)$/.test(h));
+    // the header row also names the box size (Length, or one Dimensions column), so a title row can't match
+    if (c >= 0 && k.some((h) => /^(l|len|length)$|length|dimension|^dims$|^size$/.test(h))) { hi = i; col = c; }
+  }
+  if (hi < 0) return rows.slice(0, 2).map(toCsv).join("\n"); // no stocked column: header only, no boxes
+  const yes = /^(y|yes|true|x|1|stocked|in stock)$/i;
+  return rows.filter((r, i) => i <= hi || yes.test((r[col] ?? "").trim())).map(toCsv).join("\n");
+}
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [], f = "", q = false;
+  text = text.replace(/^\uFEFF/, "");
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+    else if (c === '"' && f === "") q = true;
+    else if (c === ",") { row.push(f); f = ""; }
+    else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(f); rows.push(row); row = []; f = ""; }
+    else f += c;
+  }
+  if (f !== "" || row.length) { row.push(f); rows.push(row); }
+  return rows;
+}
+const toCsv = (r: string[]) => r.map((v) => /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v).join(",");
