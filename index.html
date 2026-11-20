@@ -631,6 +631,22 @@ th.opt{text-align:right}
           <label for="rpVolU">Units<select id="rpVolU"><option value="ft">cubic feet</option><option value="in">cubic inches</option></select></label>
         </div>
         <p class="hint">Finds stocked boxes with at least this much space inside, smallest first. It compares volume only, so check that the parts' shape fits the box.</p>
+        <details id="rpCalcBox" class="lib"><summary style="cursor:pointer"><b>Cubic volume calculator</b> <span class="hint">for loose bulk parts like bushings, grommets and screws</span></summary>
+          <div class="col" style="gap:8px;margin-top:8px">
+            <div class="row r4">
+              <label for="rpCalcL">Part L in<input id="rpCalcL" type="text" inputmode="decimal" autocomplete="off" placeholder="1"></label>
+              <label for="rpCalcW">W in<input id="rpCalcW" type="text" inputmode="decimal" autocomplete="off" placeholder="1/2"></label>
+              <label for="rpCalcH">H in<input id="rpCalcH" type="text" inputmode="decimal" autocomplete="off" placeholder="1/2"></label>
+              <label for="rpCalcQ">Qty to ship<input id="rpCalcQ" type="number" min="1" step="1" autocomplete="off" placeholder="500"></label>
+            </div>
+            <label for="rpCalcPack">How they pack<select id="rpCalcPack">
+              <option value="0.5">Loose, odd shapes (screws, bolts, springs)</option>
+              <option value="0.6" selected>Loose, simple shapes (bushings, grommets, nuts, washers)</option>
+              <option value="0.85">Lined up or stacked neatly</option></select></label>
+            <p class="hint">Rough size of one part is fine. Loose parts leave gaps between them, so the box needs more room than the parts add up to.</p>
+            <div id="rpCalcOut" class="col" style="gap:6px" role="status"></div>
+          </div>
+        </details>
       </div>
     </section>
     <section class="panel" aria-labelledby="rpOptH">
@@ -3500,13 +3516,16 @@ wirePdf({dl:"rwPdfBtn",pr:"rwPdfPrint",msg:"rwPdfMsg",build:buildRwPdf,
    The stocked boxes come from the box-inventory function with ?stocked=1, which every signed-in user may read. */
 const RP_KEY="tihi.parts.v1",RP_MAX_UNITS=250;
 const rpBlankRow=()=>({L:"",W:"",H:"",qty:"1"});
-let rp={rows:[],pad:0,up:false,count:5,mode:"size",vol:"",volU:"ft"},rpLast=null,rpView="best",rpTimer=0,rpStarted=false;
+let rp={rows:[],pad:0,up:false,count:5,mode:"size",vol:"",volU:"ft",calc:{L:"",W:"",H:"",qty:"",pack:"0.6"}},rpLast=null,rpView="best",rpTimer=0,rpStarted=false;
 const rpInv={rows:[],extra:[],state:"idle",msg:"",stockCol:""};
 function rpSave(){try{localStorage.setItem(RP_KEY,JSON.stringify(rp))}catch(e){}}
 (function rpLoadState(){
   try{const s=JSON.parse(localStorage.getItem(RP_KEY)||"null");if(s&&Array.isArray(s.rows))rp={...rp,...s}}catch(e){}
   if(!rp.rows.length)rp.rows=[rpBlankRow()];
   $("rpPad").value=rp.pad||0;$("rpUp").checked=!!rp.up;$("rpCount").value=String(rp.count||5);$("rpVol").value=rp.vol||"";$("rpVolU").value=rp.volU==="in"?"in":"ft";
+  const c=rp.calc=rp.calc||{L:"",W:"",H:"",qty:"",pack:"0.6"};
+  $("rpCalcL").value=c.L||"";$("rpCalcW").value=c.W||"";$("rpCalcH").value=c.H||"";$("rpCalcQ").value=c.qty||"";$("rpCalcPack").value=c.pack||"0.6";if(!$("rpCalcPack").value)$("rpCalcPack").value="0.6";
+  if(c.L||c.qty)$("rpCalcBox").open=true;
 })();
 async function rpLoadInv(){
   if(!sb||!PROFILE){rpInv.state="idle";rpInv.rows=[];return}
@@ -3613,13 +3632,37 @@ function rpRender(){
         .replace(/<\/div>$/,`<button type="button" data-rpview="${id}"${on?" disabled":""}>${on?"Shown above":"Show packing"}</button></div>`)}).join("")+`</div>`;
   box.innerHTML=h+`</section>`;
 }
+/* Cubic volume calculator for loose bulk parts: one part's rough L x W x H times the quantity, divided by
+   how full a box of loose parts gets (about 50-60% for parts poured in, 85% when lined up). Returns cubic inches. */
+function rpCalc(){
+  const c=rp.calc,d=[c.L,c.W,c.H].map(parseDim),q=Math.floor(num(c.qty,0)),f=num(c.pack,0.6);
+  if(d.some(v=>!(v>0))||!(q>0)||!(f>0))return null;
+  const one=d[0]*d[1]*d[2],parts=one*q;
+  return {d,q,f,one,parts,need:parts/f};
+}
+function rpCalcRender(){
+  const r=rpCalc(),out=$("rpCalcOut"),ft=rp.volU!=="in";
+  if(!r){out.innerHTML=`<p class="hint">Enter the part's rough size and the quantity to ship.</p>`;return null}
+  const show=v=>ft?`${fmt(Math.ceil(v/1728*1000)/1000,3)} cu ft`:`${fmt(Math.ceil(v),0)} cu in`; // rounded up, like the volume filled in
+  out.innerHTML=`<p class="verdict">About <b>${show(r.need)}</b> needed</p>
+    <p class="hint">${fmt(r.q)} parts × ${r.d.map(rwN).join(" × ")} in = ${show(r.parts)} of parts, at about ${fmt(r.f*100,0)}% full. The cubic volume above is filled in from this.</p>`;
+  return r;
+}
+function rpCalcApply(){
+  const r=rpCalcRender();if(!r)return;
+  const v=rp.volU==="in"?Math.ceil(r.need):Math.ceil(r.need/1728*1000)/1000;
+  rp.vol=String(v);$("rpVol").value=rp.vol;rpSchedule();
+}
+[["rpCalcL","L"],["rpCalcW","W"],["rpCalcH","H"],["rpCalcQ","qty"]].forEach(([id,k])=>$(id).addEventListener("input",()=>{rp.calc[k]=$(id).value;rpCalcApply()}));
+$("rpCalcPack").addEventListener("change",()=>{rp.calc.pack=$("rpCalcPack").value;rpCalcApply()});
 function rpRenderVol(){
   const box=$("rpResults"),raw=rp.vol,unit=rp.volU==="in"?"in":"ft",count=+rp.count||5;
   if(!String(raw).trim()){box.innerHTML=`<section class="panel"><div class="panel-head"><h2>Stocked boxes</h2></div><p class="hint">Enter the cubic volume you need to see the closest boxes stocked at HAT.</p></section>`;return}
   const v=parseDim(raw);if(!(v>0)){box.innerHTML=`<div class="alert">Enter a volume greater than zero.</div>`;return}
   const k=unit==="ft"?1728:1,need=v*k,u=unit==="ft"?"cu ft":"cu in",d=unit==="ft"?3:0;
   if(rpInv.state!=="ok"){box.innerHTML=`<section class="panel"><div class="panel-head"><h2>Stocked boxes</h2></div><p class="hint">${esc(rpSrcText())}</p></section>`;return}
-  const all=rpInv.rows.map(b=>({b,vol:b.L*b.W*b.H})),fits=all.filter(x=>x.vol>=need-1e-9).sort((a,c)=>a.vol-c.vol);
+  const cr=rpCalc(),fitsPart=b=>!cr||!!bfFit(cr.d,b,false); // with the calculator, a box must also hold one part
+  const all=rpInv.rows.map(b=>({b,vol:b.L*b.W*b.H})),fits=all.filter(x=>x.vol>=need-1e-9&&fitsPart(x.b)).sort((a,c)=>a.vol-c.vol);
   let h=`<section class="panel"><div class="panel-head"><h2>${esc(rpInv.stockCol||"Stocked at HAT")}</h2><span class="hint">${bfN(v)} ${u} · ${fmt(fits.length)} of ${fmt(all.length)} stocked boxes are big enough</span></div>`;
   if(!fits.length){const big=all.sort((a,c)=>c.vol-a.vol)[0];
     h+=`<div class="alert">No box stocked at HAT holds ${bfN(v)} ${u}.</div>`+(big?`<p class="hint">Largest: ${esc(big.b.name)} (${bfDims(big.b)}, ${fmt(big.vol/k,d)} ${u}).</p>`:"");
@@ -3634,10 +3677,11 @@ $("rpList").addEventListener("click",e=>{const d=e.target.dataset;if(d.rpdel===u
   rp.rows.splice(+d.rpdel,1);if(!rp.rows.length)rp.rows=[rpBlankRow()];rpRenderRows();rpSchedule()});
 $("rpAdd").addEventListener("click",()=>{rp.rows.push(rpBlankRow());rpRenderRows();
   const f=document.querySelector(`#rpList [data-i="${rp.rows.length-1}"] [data-f="L"]`);if(f)f.focus()});
-$("rpClear").addEventListener("click",()=>{rp.rows=[rpBlankRow()];rp.vol="";$("rpVol").value="";rpView="best";rpRenderRows();rpRun()});
+$("rpClear").addEventListener("click",()=>{rp.rows=[rpBlankRow()];rp.vol="";$("rpVol").value="";
+  rp.calc={L:"",W:"",H:"",qty:"",pack:"0.6"};["rpCalcL","rpCalcW","rpCalcH","rpCalcQ"].forEach(id=>$(id).value="");$("rpCalcPack").value="0.6";rpCalcRender();rpView="best";rpRenderRows();rpRun()});
 $("rpModes").addEventListener("click",e=>{const m=e.target.dataset.mode;if(!m)return;rpSetMode(m);rpRun()});
 $("rpVol").addEventListener("input",()=>{rp.vol=$("rpVol").value;rpSchedule()});
-$("rpVolU").addEventListener("change",()=>{rp.volU=$("rpVolU").value;rpRun()});
+$("rpVolU").addEventListener("change",()=>{rp.volU=$("rpVolU").value;if(rpCalc())rpCalcApply();else rpCalcRender();rpRun()});
 $("rpPad").addEventListener("input",()=>{rp.pad=$("rpPad").value;rpSchedule()});
 $("rpUp").addEventListener("change",()=>{rp.up=$("rpUp").checked;rpRun()});
 $("rpCount").addEventListener("change",()=>{rp.count=+$("rpCount").value;rpRun()});
@@ -3659,7 +3703,7 @@ $("rpPasteAdd").addEventListener("click",()=>{
   rpRenderRows();rpSchedule();$("rpPaste").value="";
   $("rpPasteMsg").textContent=`Added ${add.length} part${add.length===1?"":"s"}.`+(bad.length?` Skipped ${bad.length} line${bad.length===1?"":"s"} without L, W and H.`:"");
 });
-rpSetMode(rp.mode);rpRenderRows();
+rpSetMode(rp.mode);rpRenderRows();rpCalcRender();
 
 /* ---------- PAGES ---------- */
 const PAGES={builder:"builderPage",compare:"comparePage",ship:"shipPage",boxes:"boxesPage",labels:"labelsPage",redwood:"redwoodPage",parts:"partsPage"};
