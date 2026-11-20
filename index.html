@@ -618,8 +618,8 @@ th.opt{text-align:right}
         <div class="hdr-actions"><button id="rpAdd" type="button">+ Add part</button></div>
         <details id="rpPasteBox"><summary class="hint" style="cursor:pointer">Paste parts from a spreadsheet</summary>
           <div class="col" style="gap:8px;margin-top:8px">
-            <label for="rpPaste">One part per line<textarea id="rpPaste" rows="4" spellcheck="false" placeholder="RP-1001	Hinge kit	8	6	2	1"></textarea></label>
-            <p class="hint">Copy the rows straight from Excel. Use Part, Description, L, W, H, Qty.</p>
+            <label for="rpPaste">One part per line<textarea id="rpPaste" rows="4" spellcheck="false" placeholder="8	6	2	1"></textarea></label>
+            <p class="hint">Copy the rows straight from Excel. Use L, W, H and Qty (Qty can be left off for 1).</p>
             <div class="hdr-actions"><button id="rpPasteAdd" type="button" class="primary">Add these rows</button></div>
             <p id="rpPasteMsg" class="hint" role="status"></p>
           </div>
@@ -3499,7 +3499,7 @@ wirePdf({dl:"rwPdfBtn",pr:"rwPdfPrint",msg:"rwPdfMsg",build:buildRwPdf,
    column). No saved items, Uline, example, PDF, yearly quantity, Ti:Hi or saved results.
    The stocked boxes come from the box-inventory function with ?stocked=1, which every signed-in user may read. */
 const RP_KEY="tihi.parts.v1",RP_MAX_UNITS=250;
-const rpBlankRow=()=>({item:"",desc:"",L:"",W:"",H:"",qty:"1"});
+const rpBlankRow=()=>({L:"",W:"",H:"",qty:"1"});
 let rp={rows:[],pad:0,up:false,count:5,mode:"size",vol:"",volU:"ft"},rpLast=null,rpView="best",rpTimer=0,rpStarted=false;
 const rpInv={rows:[],extra:[],state:"idle",msg:"",stockCol:""};
 function rpSave(){try{localStorage.setItem(RP_KEY,JSON.stringify(rp))}catch(e){}}
@@ -3525,9 +3525,9 @@ function rpUnits(){
   const units=[],bad=[];
   rp.rows.forEach((r,k)=>{
     const d=[r.L,r.W,r.H].map(parseDim),q=Math.floor(num(r.qty,0));
-    const any=String(r.item).trim()||[r.L,r.W,r.H].some(v=>String(v).trim());
+    const any=[r.L,r.W,r.H].some(v=>String(v).trim());
     if(!any||q<=0)return;
-    if(d.some(v=>!(v>0))){bad.push(String(r.item).trim()||`Line ${k+1}`);return}
+    if(d.some(v=>!(v>0))){bad.push(`Part ${k+1}`);return}
     for(let i=0;i<q;i++)units.push({k,d});
   });
   units.sort((a,b)=>b.d[0]*b.d[1]*b.d[2]-a.d[0]*a.d[1]*a.d[2]||Math.max(...b.d)-Math.max(...a.d)||a.k-b.k);
@@ -3536,9 +3536,8 @@ function rpUnits(){
 function rpRenderRows(){
   $("rpList").innerHTML=rp.rows.map((r,i)=>`<div class="item rp-row" data-i="${i}">
     <div class="item-head"><span class="swatch" style="background:${color(i)}"></span>
-      <input data-f="item" value="${esc(r.item)}" placeholder="Part number" aria-label="Part number, line ${i+1}" autocomplete="off" spellcheck="false">
-      <button type="button" class="x" data-rpdel="${i}" aria-label="Remove line ${i+1}">✕</button></div>
-    <input data-f="desc" value="${esc(r.desc)}" placeholder="Description" aria-label="Description, line ${i+1}" autocomplete="off" style="font-family:var(--f-body)">
+      <b style="flex:1">Part ${i+1}</b>
+      <button type="button" class="x" data-rpdel="${i}" aria-label="Remove part ${i+1}">✕</button></div>
     <div class="row r4">
       <label>L in<input data-f="L" value="${esc(r.L)}" inputmode="decimal" autocomplete="off"></label>
       <label>W in<input data-f="W" value="${esc(r.W)}" inputmode="decimal" autocomplete="off"></label>
@@ -3595,10 +3594,10 @@ function rpRender(){
   h+=`<section class="panel"><div class="panel-head"><h2>${title}</h2>${X?`<button type="button" data-rpview="ideal">Show smallest possible box</button>`:b0?`<button type="button" data-rpview="best">Back to best stocked box</button>`:`<span class="hint">${L.up?"Parts kept upright":"Parts may be turned any way"}</span>`}</div>
     <div class="dims mono">${dimsTxt}</div>
     <figure class="rw-iso">${rwIsoSVG(C,P,title+", "+[C.L,C.W,C.H].map(rwN).join(" by ")+" inches")}</figure>
-    <div class="legend">${rp.rows.map((r,k)=>L.units.some(u=>u.k===k)?`<span><i class="swatch" style="background:${color(k)}"></i>${esc(String(r.item).trim()||"Line "+(k+1))} × ${L.units.filter(u=>u.k===k).length}</span>`:"").join("")}</div>
+    <div class="legend">${rp.rows.map((r,k)=>L.units.some(u=>u.k===k)?`<span><i class="swatch" style="background:${color(k)}"></i>Part ${k+1} × ${L.units.filter(u=>u.k===k).length}</span>`:"").join("")}</div>
     <details><summary class="hint" style="cursor:pointer">Packing order (bottom layer first)</summary><div class="tablewrap"><table>
       <thead><tr><th>#</th><th>Part</th><th>Sits as L × W × H</th><th>From back corner (L, W, up)</th></tr></thead><tbody>
-      ${P.slice().sort((a,b)=>a.z-b.z||a.y-b.y||a.x-b.x).map((a,i)=>`<tr><td class="n">${i+1}</td><td><i class="swatch" style="display:inline-block;vertical-align:middle;margin-right:6px;background:${color(a.k)}"></i>${esc(String(rp.rows[a.k].item).trim()||"Line "+(a.k+1))}</td>
+      ${P.slice().sort((a,b)=>a.z-b.z||a.y-b.y||a.x-b.x).map((a,i)=>`<tr><td class="n">${i+1}</td><td><i class="swatch" style="display:inline-block;vertical-align:middle;margin-right:6px;background:${color(a.k)}"></i>Part ${a.k+1}</td>
         <td class="mono">${a.o.map(rwN).join(" × ")}</td><td class="mono">${[a.x,a.y,a.z].map(rwN).join(", ")}</td></tr>`).join("")}
       </tbody></table></div></details>
     <p class="hint">Sizes are inside dimensions. The picture is one way to pack the parts, found by computer; a person may find a tighter one.</p></section>`;
@@ -3634,7 +3633,7 @@ $("rpList").addEventListener("input",e=>{const f=e.target.dataset.f,row=e.target
 $("rpList").addEventListener("click",e=>{const d=e.target.dataset;if(d.rpdel===undefined)return;
   rp.rows.splice(+d.rpdel,1);if(!rp.rows.length)rp.rows=[rpBlankRow()];rpRenderRows();rpSchedule()});
 $("rpAdd").addEventListener("click",()=>{rp.rows.push(rpBlankRow());rpRenderRows();
-  const f=document.querySelector(`#rpList [data-i="${rp.rows.length-1}"] [data-f="item"]`);if(f)f.focus()});
+  const f=document.querySelector(`#rpList [data-i="${rp.rows.length-1}"] [data-f="L"]`);if(f)f.focus()});
 $("rpClear").addEventListener("click",()=>{rp.rows=[rpBlankRow()];rp.vol="";$("rpVol").value="";rpView="best";rpRenderRows();rpRun()});
 $("rpModes").addEventListener("click",e=>{const m=e.target.dataset.mode;if(!m)return;rpSetMode(m);rpRun()});
 $("rpVol").addEventListener("input",()=>{rp.vol=$("rpVol").value;rpSchedule()});
@@ -3646,21 +3645,19 @@ $("rpResults").addEventListener("click",e=>{const v=e.target.dataset.rpview;if(!
   if(v!=="best")$("rpResults").scrollIntoView({behavior:"smooth",block:"start"})});
 // Pasted rows: Part, Description, L, W, H, Qty (tabs or commas)
 $("rpPasteAdd").addEventListener("click",()=>{
-  const lines=$("rpPaste").value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean),add=[],miss=[];
+  const lines=$("rpPaste").value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean),add=[],bad=[];
   for(const l of lines){
-    const c=(l.includes("\t")?l.split("\t"):l.includes(",")?parseCsv(l)[0]||[]:l.split(/\s+/)).map(v=>String(v).trim());
-    let n=0;while(n<c.length-1&&parseDim(c[c.length-1-n])>=0&&String(c[c.length-1-n])!=="")n++;
-    const text=c.slice(0,c.length-n).filter(Boolean),nums=c.slice(c.length-n).map(parseDim);
-    if(!text.length){if(nums.length)miss.push(l);continue}
-    if(/^(item|part|(item|part) ?(no|number|#))$/i.test(text[0])&&!nums.length)continue; // header row
-    const item=text[0],desc=text.slice(1).join(" ");
-    if(nums.length>=3){const [L,W,H,qty]=nums;add.push({item,desc,L:String(L),W:String(W),H:String(H),qty:String(qty>0?Math.floor(qty):1)})}
-    else{add.push({item,desc,L:"",W:"",H:"",qty:String(nums.length?Math.floor(nums[nums.length-1])||1:1)});miss.push(item)}
+    const c=(l.includes("\t")?l.split("\t"):l.includes(",")?parseCsv(l)[0]||[]:l.split(/\s+(?!\d+\/)/)).map(v=>String(v).trim()).filter(Boolean);
+    const nums=c.map(parseDim).filter(v=>v>0); // any text columns (part number, description) are skipped
+    if(!nums.length)continue; // header row
+    if(nums.length<3){bad.push(l);continue}
+    // L, W, H, Qty are the last four numbers (or L, W, H the only three), so a numeric part number in front is skipped
+    const [L,W,H,qty]=nums.length>=4?nums.slice(-4):nums;add.push({L:String(L),W:String(W),H:String(H),qty:String(qty>0?Math.floor(qty):1)});
   }
-  if(!add.length){$("rpPasteMsg").textContent="No rows found. Put one part on each line.";return}
-  rp.rows=rp.rows.filter(r=>String(r.item).trim()||[r.desc,r.L,r.W,r.H].some(v=>String(v).trim())).concat(add);
+  if(!add.length){$("rpPasteMsg").textContent="No rows found. Put one part on each line with L, W, H and Qty.";return}
+  rp.rows=rp.rows.filter(r=>[r.L,r.W,r.H].some(v=>String(v).trim())).concat(add);
   rpRenderRows();rpSchedule();$("rpPaste").value="";
-  $("rpPasteMsg").textContent=`Added ${add.length} line${add.length===1?"":"s"}.`+(miss.length?` Fill in the size for ${miss.join(", ")}.`:"");
+  $("rpPasteMsg").textContent=`Added ${add.length} part${add.length===1?"":"s"}.`+(bad.length?` Skipped ${bad.length} line${bad.length===1?"":"s"} without L, W and H.`:"");
 });
 rpSetMode(rp.mode);rpRenderRows();
 
